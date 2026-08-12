@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>PlatenReports.Core</PackageId>
+    <Description>JSON-defined, SQL-driven PDF reporting for .NET. Definition model, binding, and rendering pipeline.</Description>
+    <RootNamespace>PlatenReports</RootNamespace>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+</Project>

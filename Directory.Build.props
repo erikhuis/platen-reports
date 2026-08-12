@@ -1,0 +1,72 @@
+<Project>
+
+  <!-- ==========================================================
+       The single source of truth for the version of everything
+       this repository publishes, .NET and npm alike. One number,
+       lockstep releases. See docs/versioning.md.
+       ========================================================== -->
+  <PropertyGroup>
+    <VersionPrefix>0.0.0</VersionPrefix>
+    <!-- Set by CI for prereleases: -alpha.N / -beta.N / -rc.N -->
+    <VersionSuffix Condition="'$(VersionSuffix)' == ''"></VersionSuffix>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!-- ==========================================================
+       Package metadata. Applies to every packable project; the
+       per-project .csproj supplies only PackageId/Description.
+       ========================================================== -->
+  <PropertyGroup>
+    <Authors>Erik Huisman</Authors>
+    <Company>CTO Consultancy</Company>
+    <Product>Platen Reports</Product>
+    <Copyright>Copyright 2026 Erik Huisman / CTO Consultancy</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/erikhuis/platen-reports</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/erikhuis/platen-reports</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>reporting;pdf;report-designer;sql</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon Condition="Exists('$(MSBuildThisFileDirectory)assets/icon.png')">icon.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)assets/icon.png"
+          Condition="Exists('$(MSBuildThisFileDirectory)assets/icon.png')"
+          Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <!-- ==========================================================
+       Reproducible builds + debuggability.
+
+       SourceLink for GitHub is built into the .NET SDK (8.0+), so
+       no Microsoft.SourceLink.GitHub PackageReference is needed —
+       PublishRepositoryUrl and EmbedUntrackedSources are what
+       actually switch it on.
+
+       ContinuousIntegrationBuild normalises paths in the PDB and
+       must only be set in CI: setting it locally breaks stepping
+       into sources in the debugger.
+       ========================================================== -->
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

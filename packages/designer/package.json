@@ -1,0 +1,29 @@
+{
+  "name": "@platen-reports/designer",
+  "version": "0.0.0",
+  "description": "React report designer for Platen Reports. Placeholder release reserving the package name — not yet implemented.",
+  "license": "Apache-2.0",
+  "author": "Erik Huisman (CTO Consultancy)",
+  "homepage": "https://github.com/erikhuis/platen-reports#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erikhuis/platen-reports.git",
+    "directory": "packages/designer"
+  },
+  "bugs": {
+    "url": "https://github.com/erikhuis/platen-reports/issues"
+  },
+  "keywords": [
+    "reporting",
+    "report-designer",
+    "pdf",
+    "react"
+  ],
+  "files": [
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PlatenReports.Core/PlatenReports.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PlatenReports.Core.Tests/PlatenReports.Core.Tests.csproj" />
+  </Folder>
+</Solution>
