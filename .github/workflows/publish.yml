@@ -1,0 +1,80 @@
+name: Publish
+
+# Publishes to nuget.org using Trusted Publishing (OIDC) — no API key is stored
+# anywhere. The workflow requests a short-lived GitHub OIDC token, nuget.org
+# validates it against the trusted publishing policy registered for this
+# repository, and returns a temporary API key valid for one hour.
+#
+# The policy on nuget.org is bound to THIS FILE BY NAME (publish.yml). Renaming
+# or moving this file breaks publishing until the policy is updated.
+#
+# Setup, once, on nuget.org → username → Trusted Publishing:
+#   Repository Owner: erikhuis
+#   Repository:       platen-reports
+#   Workflow File:    publish.yml
+#   Environment:      (leave empty — this workflow uses none)
+# Plus a NUGET_USER secret holding the nuget.org username (profile name, not
+# the email address).
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    name: pack · push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for GitHub to issue the OIDC token
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # SourceLink needs the history
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      # Never publish something that has not been tested.
+      - name: Test
+        run: dotnet test --no-build --configuration Release
+
+      - name: Pack
+        run: dotnet pack --no-build --configuration Release --output artifacts
+
+      - name: List packages
+        run: ls -l artifacts
+
+      # Request the short-lived key as late as possible: it expires after an
+      # hour, and each OIDC token buys exactly one key.
+      - name: NuGet login (OIDC → temporary API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # --skip-duplicate so re-running the workflow after a partial failure does
+      # not fail on versions that already made it up.
+      - name: Push
+        run: |
+          dotnet nuget push "artifacts/*.nupkg" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

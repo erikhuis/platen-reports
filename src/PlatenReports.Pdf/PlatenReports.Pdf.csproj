@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>PlatenReports.Pdf</PackageId>
+    <Description>PDF layout and output for Platen Reports. Placeholder release reserving the package id — not yet implemented.</Description>
+    <RootNamespace>PlatenReports.Pdf</RootNamespace>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+</Project>

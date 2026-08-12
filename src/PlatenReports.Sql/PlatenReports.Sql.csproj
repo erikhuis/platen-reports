@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>PlatenReports.Sql</PackageId>
+    <Description>SQL data provider for Platen Reports. Placeholder release reserving the package id — not yet implemented.</Description>
+    <RootNamespace>PlatenReports.Sql</RootNamespace>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+</Project>
