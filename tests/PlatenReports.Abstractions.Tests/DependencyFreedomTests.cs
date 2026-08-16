@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 using FluentAssertions;
 using PlatenReports.Model;
@@ -13,15 +12,18 @@ namespace PlatenReports.Abstractions.Tests;
 /// </summary>
 public class DependencyFreedomTests
 {
-    /// <summary>Locates the real .csproj rather than a copy, so the assertion cannot drift from what ships.</summary>
-    private static XDocument LoadProjectFile([CallerFilePath] string thisFile = "")
+    /// <summary>
+    /// Reads the project file that was just compiled. The build copies it next to the test
+    /// assembly, so the assertion cannot drift from what ships — and, unlike locating it from
+    /// <c>[CallerFilePath]</c>, this survives a CI build, which path-maps source paths to
+    /// <c>/_/…</c> for determinism and would leave the file nowhere to be found.
+    /// </summary>
+    private static XDocument LoadProjectFile()
     {
-        var testDirectory = Directory.GetParent(thisFile)!;
-        var repositoryRoot = testDirectory.Parent!.Parent!;
-        var csproj = Path.Combine(
-            repositoryRoot.FullName, "src", "PlatenReports.Abstractions", "PlatenReports.Abstractions.csproj");
+        var csproj = Path.Combine(AppContext.BaseDirectory, "PlatenReports.Abstractions.csproj");
 
-        File.Exists(csproj).Should().BeTrue($"the project file should be at {csproj}");
+        File.Exists(csproj).Should().BeTrue(
+            $"the build should copy the project file to {csproj} — see the None/CopyToOutputDirectory item in the test .csproj");
         return XDocument.Load(csproj);
     }
 
