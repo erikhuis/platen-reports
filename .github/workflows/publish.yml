@@ -221,11 +221,20 @@ jobs:
           NPM_TAG: ${{ steps.version.outputs.npm_tag }}
         run: |
           set -euo pipefail
+          # --loglevel verbose is not noise here, it is the only way to see why
+          # a trusted-publishing failure happened. npm's OIDC helper is written
+          # never to throw: every failure — missing id-token permission, a bad
+          # token fetch, a rejected exchange — is logged at verbose and then
+          # swallowed, after which publish reports a bare ENEEDAUTH with no
+          # reason attached. At verbose the "oidc" lines carry the registry's
+          # actual message.
+          #
           # The ./ is load-bearing: npm reads a bare a/b argument as the GitHub
           # shorthand owner/repo and tries to clone it.
           npm publish "./artifacts/platen-reports-designer-$VERSION.tgz" \
             --provenance \
-            --tag "$NPM_TAG"
+            --tag "$NPM_TAG" \
+            --loglevel verbose
 
       # Request the short-lived key as late as possible: it expires after an
       # hour, and each OIDC token buys exactly one key.
