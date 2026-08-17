@@ -19,12 +19,25 @@ returning a nested `Dictionary<string, object?>`. The engine itself touches no
 database, no ORM, and no SQL. Whatever can fill that dictionary can drive a
 report.
 
-| Package | Registry | What |
-|---|---|---|
-| `PlatenReports.Core` | NuGet | Definition model, binding, rendering pipeline |
-| `PlatenReports.Sql` | NuGet | SQL data provider |
-| `PlatenReports.Pdf` | NuGet | PDF layout + output |
-| `@platen-reports/designer` | npm | React report designer |
+| Package | Registry | What | Status |
+|---|---|---|---|
+| `PlatenReports.Abstractions` | NuGet | The definition model and the ports a host implements. **No dependencies.** | shipped |
+| `PlatenReports.Core` | NuGet | The engine: parser, overlay merger, path binder, template renderer, definition sources, reporting service | shipped |
+| `PlatenReports.NCalc` | NuGet | `visibleIf` condition evaluation | planned |
+| `PlatenReports.AspNetCore` | NuGet | Endpoint mapping, DI, and the authorization port | planned |
+| `PlatenReports.Sql` | NuGet | SQL data provider | placeholder |
+| `PlatenReports.Pdf` | NuGet | PDF layout + output | placeholder |
+| `@platen-reports/model` | npm | Document model and overlay algebra, for the designer and the conformance suite | planned |
+| `@platen-reports/designer` | npm | React report designer | placeholder |
+
+Packages marked *placeholder* reserve the name and publish a stub; they do not do
+anything yet. The engine is being extracted in phases and this table tracks it.
+
+**Why `Abstractions` is separate:** a host implements `IReportDataProvider`. If that
+interface lived in `Core`, declaring a provider would drag in Scriban and everything
+else the engine happens to use. It is also what makes "the contract layer is
+licence-clean" a checkable property rather than a claim — there is nothing in it to
+audit.
 
 All packages in this repository share one version and are released in lockstep.
 **Equal versions are conformant** — pin both sides to the same number.

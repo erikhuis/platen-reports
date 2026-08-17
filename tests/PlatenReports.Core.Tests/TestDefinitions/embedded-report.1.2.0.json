@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "key": "embedded-report",
+  "version": "1.2.0",
+  "title": { "en": "Embedded report" },
+  "dataSource": "test-source",
+  "body": [ { "id": "a", "type": "text", "text": "content" } ]
+}

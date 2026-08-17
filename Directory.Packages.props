@@ -9,7 +9,8 @@
        appear in THIRD-PARTY-NOTICES.md. Versions carried over from the origin
        codebase at extraction (2026-08). -->
   <ItemGroup>
-    <PackageVersion Include="Scriban" Version="7.2.0" />
+    <PackageVersion Include="Scriban" Version="7.2.6" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Markdig" Version="1.3.2" />
     <PackageVersion Include="NCalcSync" Version="6.3.0" />
     <PackageVersion Include="PdfSharpCore" Version="1.3.67" />

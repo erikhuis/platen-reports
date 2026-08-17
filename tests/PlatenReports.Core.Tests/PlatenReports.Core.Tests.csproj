@@ -12,6 +12,12 @@
     <PackageReference Include="FluentAssertions" />
   </ItemGroup>
 
+  <!-- A definition embedded under a known prefix, so DefinitionSourceTests can prove the
+       embedded source reads the assembly and prefix its caller names. -->
+  <ItemGroup>
+    <EmbeddedResource Include="TestDefinitions/*.json" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../../src/PlatenReports.Core/PlatenReports.Core.csproj" />
   </ItemGroup>
