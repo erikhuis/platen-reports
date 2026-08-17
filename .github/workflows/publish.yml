@@ -1,12 +1,17 @@
 name: Publish
 
-# Publishes to nuget.org using Trusted Publishing (OIDC) — no API key is stored
-# anywhere. The workflow requests a short-lived GitHub OIDC token, nuget.org
-# validates it against the trusted publishing policy registered for this
-# repository, and returns a temporary API key valid for one hour.
+# Publishes every package this repository ships — the .NET packages to
+# nuget.org and @platen-reports/designer to npm — from one tag, in lockstep.
+# See docs/versioning.md: equal versions are conformant, so the two registries
+# must not drift.
 #
-# The policy on nuget.org is bound to THIS FILE BY NAME (publish.yml). Renaming
-# or moving this file breaks publishing until the policy is updated.
+# Both registries use Trusted Publishing (OIDC) — no API key or token is stored
+# anywhere. The workflow requests a short-lived GitHub OIDC token, the registry
+# validates it against the trusted publishing policy registered for this
+# repository, and hands back credentials good for one publish.
+#
+# Both policies are bound to THIS FILE BY NAME (publish.yml). Renaming or moving
+# this file breaks publishing until both are updated.
 #
 # Setup, once, on nuget.org → username → Trusted Publishing:
 #   Repository Owner: erikhuis
@@ -15,6 +20,32 @@ name: Publish
 #   Environment:      (leave empty — this workflow uses none)
 # Plus a NUGET_USER secret holding the nuget.org username (profile name, not
 # the email address).
+#
+# Setup, once, on npmjs.com. The scope and the placeholder are already in place
+# — @platen-reports/designer@0.0.0 was published by hand — which is what npm
+# requires before a trusted publisher can be bound to a package at all. The
+# binding itself is Package → Settings → Trusted Publisher → GitHub Actions:
+#   Organization or user: erikhuis
+#   Repository:           platen-reports
+#   Workflow filename:    publish.yml
+#   Environment:          (leave empty)
+# If that binding is missing, or names a different workflow file, the npm step
+# fails on a 4xx. Nothing will have reached nuget.org at that point — npm
+# publishes first for exactly this reason — so the fix is to bind it and cut a
+# new tag.
+#
+# Cutting a release (see docs/versioning.md):
+#   0. 0.0.0 is already taken on both registries by the id-reserving
+#      placeholders, so the first release driven from here is 0.1.0 or later.
+#   1. Bump <VersionPrefix> in Directory.Build.props and commit it. That file
+#      stays the only place a version is written.
+#   2. Tag that commit vX.Y.Z, or vX.Y.Z-alpha.N for a prerelease.
+#   3. Push the tag. This workflow refuses to run on anything but a v* tag, and
+#      refuses to publish if the tag and Directory.Build.props disagree.
+# workflow_dispatch re-runs a release that failed before the push — pick the
+# tag, not a branch, in the ref dropdown. A release that failed part way
+# *through* the push cannot be retried: nuget.org does not allow a version to
+# be replaced. Cut a new patch tag instead.
 
 on:
   workflow_dispatch:
@@ -46,6 +77,78 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing on npm needs 11.5.1 or newer. Node 24 ships a new
+      # enough npm today; upgrading anyway keeps this working when the runner
+      # image moves and costs a few seconds on a workflow that runs per release.
+      - name: Upgrade npm
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          npm --version
+
+      # The tag names the release; Directory.Build.props writes the version.
+      # This step splits the tag, the next one asserts the two agree — a
+      # mismatch fails the release rather than publishing a version nobody
+      # chose. Without this the pack below would silently use whatever
+      # <VersionPrefix> happens to say, tag or no tag.
+      - name: Resolve version from tag
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" != "tag" ]; then
+            echo "::error::Publish runs from a v* tag only; this run is on $REF_TYPE '$REF_NAME'."
+            exit 1
+          fi
+          if [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Tag '$REF_NAME' is not vMAJOR.MINOR.PATCH[-prerelease]."
+            exit 1
+          fi
+          version="${REF_NAME#v}"
+          prefix="${version%%-*}"
+          suffix="${version#"$prefix"}"   # '' or '-alpha.1'
+          suffix="${suffix#-}"            # VersionSuffix carries no leading dash
+          # npm has no notion of "prerelease" in its resolution — whatever
+          # dist-tag you publish under is what `npm install <pkg>` gets, and it
+          # defaults to latest. NuGet excludes prereleases on its own; npm has
+          # to be told. So alpha.1 publishes under the alpha tag, leaving
+          # latest pointing at the newest stable.
+          if [ -n "$suffix" ]; then
+            npm_tag="${suffix%%.*}"
+          else
+            npm_tag="latest"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "npm_tag=$npm_tag" >> "$GITHUB_OUTPUT"
+          # Exported, not passed per-command: restore, build, test and pack must
+          # all see the same version, or the assembly inside the package
+          # disagrees with the package. Directory.Build.props only defaults
+          # VersionSuffix when it is empty, so this wins.
+          echo "VersionSuffix=$suffix" >> "$GITHUB_ENV"
+          echo "Releasing $version (prefix $prefix, suffix ${suffix:-none}, npm tag $npm_tag)."
+
+      - name: Check tag against Directory.Build.props
+        env:
+          TAG_PREFIX: ${{ steps.version.outputs.prefix }}
+        run: |
+          set -euo pipefail
+          props=$(dotnet msbuild src/PlatenReports.Core/PlatenReports.Core.csproj \
+                    -getProperty:VersionPrefix | tr -d '[:space:]')
+          if [ "$props" != "$TAG_PREFIX" ]; then
+            echo "::error::Tag v$TAG_PREFIX disagrees with <VersionPrefix>$props</VersionPrefix> in Directory.Build.props. Bump the props file, commit, and re-tag."
+            exit 1
+          fi
+          echo "Tag and Directory.Build.props agree on $props."
+
       - name: Restore
         run: dotnet restore
 
@@ -59,8 +162,63 @@ jobs:
       - name: Pack
         run: dotnet pack --no-build --configuration Release --output artifacts
 
-      - name: List packages
-        run: ls -l artifacts
+      # The npm package carries no version of its own — docs/versioning.md makes
+      # Directory.Build.props the only place a version is written, so the 0.0.0
+      # sitting in package.json is a placeholder overwritten here. The rewrite is
+      # never committed; the runner is thrown away.
+      #
+      # There is no build step because the designer is still a placeholder. When
+      # it has sources, the build belongs here, before the pack.
+      - name: Pack designer
+        working-directory: packages/designer
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm pack --pack-destination ../../artifacts
+
+      # Everything is packed and nothing is published yet: this is the last
+      # point at which a wrong version costs nothing. Both registries are
+      # checked together, because a release that is right on one and wrong on
+      # the other breaks the lockstep guarantee in docs/versioning.md.
+      - name: Verify packages
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          ls -l artifacts
+          missing=0
+          for f in "PlatenReports.Core.$VERSION.nupkg" \
+                   "PlatenReports.Sql.$VERSION.nupkg" \
+                   "PlatenReports.Pdf.$VERSION.nupkg" \
+                   "platen-reports-designer-$VERSION.tgz"; do
+            if [ ! -f "artifacts/$f" ]; then
+              echo "::error::artifacts/$f was not produced; refusing to publish."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+
+      # npm goes first of the two publishes. Neither registry can be rolled
+      # back, so a split release is possible either way; putting the more
+      # failure-prone half first means its failure aborts the run before
+      # anything reaches nuget.org. npm is the more failure-prone half — the
+      # scope, the package and its trusted publisher all have to exist.
+      #
+      # Publishing the tarball rather than the directory ships exactly the bits
+      # the verify step looked at, matching how the NuGet half works.
+      - name: Publish designer (npm)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          NPM_TAG: ${{ steps.version.outputs.npm_tag }}
+        run: |
+          set -euo pipefail
+          # The ./ is load-bearing: npm reads a bare a/b argument as the GitHub
+          # shorthand owner/repo and tries to clone it.
+          npm publish "./artifacts/platen-reports-designer-$VERSION.tgz" \
+            --provenance \
+            --tag "$NPM_TAG"
 
       # Request the short-lived key as late as possible: it expires after an
       # hour, and each OIDC token buys exactly one key.
@@ -70,11 +228,19 @@ jobs:
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      # --skip-duplicate so re-running the workflow after a partial failure does
-      # not fail on versions that already made it up.
+      # Deliberately no --skip-duplicate. A version already on nuget.org is a
+      # mistake worth failing on — either the tag was reused, or the release
+      # already went out. Both should be loud, and a release that publishes
+      # nothing must not report success.
+      #
+      # The cost is that re-running after a partial push fails on the packages
+      # that did make it up. That is the intended trade: nuget.org will not let
+      # a version be replaced anyway, so the fix is a new patch tag, not a retry.
       - name: Push
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
+          set -euo pipefail
           dotnet nuget push "artifacts/*.nupkg" \
-            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
-            --source https://api.nuget.org/v3/index.json \
-            --skip-duplicate
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json

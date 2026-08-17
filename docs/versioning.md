@@ -16,7 +16,9 @@ or not a given package changed.
 ```
 
 The npm packages read the same value at pack time rather than carrying their own
-(see `.github/workflows/ci.yml`).
+(see `.github/workflows/publish.yml`). The `version` field committed in their
+`package.json` is a placeholder; the release workflow overwrites it from the tag
+and never commits the result.
 
 ## Why lockstep
 
@@ -70,6 +72,15 @@ public props is a major, the same as one that breaks a .NET interface.
 Prerelease builds use `-alpha.N` / `-beta.N` / `-rc.N` suffixes via
 `<VersionSuffix>`, applied to the same shared `<VersionPrefix>`. CI publishes
 prereleases from tagged commits only.
+
+NuGet keeps prereleases out of ordinary resolution by itself. npm does not — it
+installs whatever `latest` points at — so a prerelease is published under an npm
+dist-tag named for its channel, leaving `latest` on the newest stable:
+
+```
+npm install @platen-reports/designer          # newest stable
+npm install @platen-reports/designer@alpha    # newest alpha
+```
 
 ## Relationship to the other two version axes
 

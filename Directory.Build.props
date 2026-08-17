@@ -7,7 +7,10 @@
        ========================================================== -->
   <PropertyGroup>
     <VersionPrefix>0.0.0</VersionPrefix>
-    <!-- Set by CI for prereleases: -alpha.N / -beta.N / -rc.N -->
+    <!-- Left empty here and supplied by the publish workflow, which reads it
+         off the release tag: v0.1.0-alpha.1 sets alpha.1. No leading dash —
+         the SDK joins prefix and suffix with one. The condition is what lets
+         CI's value survive; do not drop it. -->
     <VersionSuffix Condition="'$(VersionSuffix)' == ''"></VersionSuffix>
   </PropertyGroup>
 
