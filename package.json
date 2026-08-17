@@ -1,0 +1,21 @@
+{
+  "name": "platen-reports-workspace",
+  "private": true,
+  "description": "Workspace root. Not published \u2014 the publishable packages live under packages/.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.11.0",
+  "scripts": {
+    "build": "pnpm -r --filter './packages/**' build",
+    "test": "pnpm -r --filter './packages/**' test",
+    "typecheck": "pnpm -r --filter './packages/**' typecheck",
+    "lint": "pnpm -r --filter './packages/**' lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "tsup": "^8.3.5",
+    "vitest": "^2.1.8"
+  }
+}
