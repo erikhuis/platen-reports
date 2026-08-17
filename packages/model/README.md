@@ -45,6 +45,16 @@ if (problems.length === 0) {
 Everything is exported from the package root. Deep imports into individual modules are not part
 of the public surface and may be reorganised.
 
+## TypeScript requirement
+
+`ReportsApiClient.previewPdf` returns a `Blob`, so your `tsconfig.json` needs a lib that
+declares one — either `"lib": ["…", "DOM"]` (any browser or bundler setup) or `@types/node`
+(Node 18+, where `Blob` is global). Both are the common case.
+
+A project with neither — say `"lib": ["ES2022"]` and no `@types/node` — will see
+`TS2304: Cannot find name 'Blob'` from this package's declarations. Tracked as
+[platen-reports#10](https://github.com/erikhuis/platen-reports/issues/10).
+
 ## Versioning
 
 Every package in this repository shares one version and is released in lockstep. **Equal
