@@ -15,10 +15,21 @@ the non-goals in the README.
 ## Scriban
 
 - **Purpose:** expression and template evaluation in report definitions.
-- **Version at extraction:** 7.2.0
+- **Version at extraction:** 7.2.0. **Now referenced at 7.2.6** — 7.2.0 carries three
+  published advisories, one of them high severity (GHSA-7jvp-hj45-2f2m,
+  GHSA-6q7j-xr26-3h2c, GHSA-q6rr-fm2g-g5x8), all fixed in the 7.2.x line.
 - **Licence:** BSD 2-Clause "Simplified" License
 - **Upstream:** https://github.com/scriban/scriban
 - **Licence text:** https://github.com/scriban/scriban/blob/master/license.txt
+
+## Microsoft.Extensions.Logging.Abstractions
+
+- **Purpose:** the `ILogger<T>` the engine writes merge warnings and render failures to.
+  Abstractions only — the engine takes no logging *implementation*, so a host keeps its own.
+- **Version at extraction:** 10.0.0
+- **Licence:** MIT License
+- **Upstream:** https://github.com/dotnet/runtime
+- **Licence text:** https://github.com/dotnet/runtime/blob/main/LICENSE.TXT
 
 ## Markdig
 

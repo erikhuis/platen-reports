@@ -2,9 +2,24 @@
 
   <PropertyGroup>
     <PackageId>PlatenReports.Core</PackageId>
-    <Description>JSON-defined, SQL-driven PDF reporting for .NET. Definition model, binding, and rendering pipeline.</Description>
+    <Description>JSON-defined, SQL-driven PDF reporting for .NET. The engine: definition parser, customisation-overlay merger, path binder, template renderer, field describer and the orchestrating reporting service.</Description>
     <RootNamespace>PlatenReports</RootNamespace>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../PlatenReports.Abstractions/PlatenReports.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- BuildFileName is internal by design; its test asserts the naming contract directly
+       because going through RenderAsync would need a full render just to read a filename. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="PlatenReports.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Scriban" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
 
 </Project>
