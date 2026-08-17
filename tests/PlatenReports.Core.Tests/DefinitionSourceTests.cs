@@ -73,6 +73,30 @@ public class DefinitionSourceTests
     }
 
     [Fact]
+    public void An_exact_version_tie_resolves_to_the_first_document_deterministically()
+    {
+        // Not a scenario anyone should create, but it must not vary between runs or builds:
+        // whichever source enumerated first wins, and both file-backed sources enumerate in a
+        // defined order so "first" means something.
+        var source = new InMemoryDefinitionSource(
+            Definition("r", "1.0.0"), Definition("r", "1.0.0"));
+
+        source.ListReports().Should().HaveCount(1);
+        source.Get("r")!.Version.Should().Be("1.0.0");
+    }
+
+    [Fact]
+    public void A_semver_prerelease_version_is_rejected_not_silently_accepted()
+    {
+        // Documented on ReportDefinition.Version: it must parse as System.Version, which has no
+        // prerelease concept. Carried from the origin; pinned here so the constraint is visible
+        // to anyone versioning a definition.
+        var act = () => new InMemoryDefinitionSource(Definition("r", "2.0.0-rc1"));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*2.0.0-rc1*");
+    }
+
+    [Fact]
     public void ListReports_is_ordered_by_key()
     {
         var source = new InMemoryDefinitionSource(

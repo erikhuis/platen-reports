@@ -47,9 +47,15 @@ public sealed class EmbeddedResourceDefinitionSource : IReportDefinitionSource
     {
         var documents = new List<(string Json, string Origin)>();
 
+        // Ordered because GetManifestResourceNames() makes no ordering guarantee, and on an
+        // exact version tie the first document loaded wins. Unordered, two resources declaring
+        // the same key at the same version would resolve to whichever the runtime happened to
+        // enumerate first — a difference that could appear between builds. DirectoryDefinitionSource
+        // orders for the same reason.
         foreach (var resourceName in assembly.GetManifestResourceNames()
                      .Where(n => n.StartsWith(prefix, StringComparison.Ordinal)
-                                 && n.EndsWith(".json", StringComparison.Ordinal)))
+                                 && n.EndsWith(".json", StringComparison.Ordinal))
+                     .OrderBy(n => n, StringComparer.Ordinal))
         {
             using var stream = assembly.GetManifestResourceStream(resourceName)
                 ?? throw new InvalidOperationException(
