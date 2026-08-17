@@ -77,11 +77,18 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Deliberately no registry-url. It reads like the right thing to set, and
+      # it breaks trusted publishing: setup-node responds by writing an .npmrc
+      # containing _authToken=${NODE_AUTH_TOKEN}, and with no token secret in
+      # play NODE_AUTH_TOKEN becomes the literal placeholder XXXXX-XXXXX-XXXXX.
+      # npm then authenticates as nobody instead of exchanging its OIDC token,
+      # and the registry answers an unauthorised write with 404, not 403 — so
+      # the failure reads as "package not found" for a package that plainly
+      # exists. registry.npmjs.org is the default registry anyway.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          registry-url: https://registry.npmjs.org
 
       # Trusted publishing on npm needs 11.5.1 or newer. Node 24 ships a new
       # enough npm today; upgrading anyway keeps this working when the runner
