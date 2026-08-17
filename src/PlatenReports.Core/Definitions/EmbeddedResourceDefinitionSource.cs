@@ -12,7 +12,10 @@ namespace PlatenReports.Definitions;
 /// <para>The assembly and resource prefix are <b>constructor arguments</b>, not constants. A
 /// package cannot know where its host keeps its definitions, and hardcoding either would make
 /// this class useful to exactly one application.</para>
-/// <para>Documents are read, parsed and validated once, on first use.</para>
+/// <para>Documents are read, parsed and validated once, on <b>first use</b> — not at
+/// construction. An invalid embedded definition therefore throws from <see cref="ListReports"/>
+/// or <see cref="Get"/>. Since these ship inside the assembly, calling <see cref="ListReports"/>
+/// once at startup turns a latent build defect into a boot failure, which is where it belongs.</para>
 /// </remarks>
 public sealed class EmbeddedResourceDefinitionSource : IReportDefinitionSource
 {

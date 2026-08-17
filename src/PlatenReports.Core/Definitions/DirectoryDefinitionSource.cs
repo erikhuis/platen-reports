@@ -2,9 +2,13 @@ namespace PlatenReports.Definitions;
 
 /// <summary>Loads definitions from <c>*.json</c> files in a directory.</summary>
 /// <remarks>
-/// Useful for a host that wants definitions editable without a redeploy, and for the sample
-/// host. Like the embedded source, the highest version per key wins and documents are read once
-/// on first use — this does <b>not</b> watch the directory for changes.
+/// <para>Useful for a host that wants definitions editable without a redeploy, and for the
+/// sample host. The highest version per key wins, and this does <b>not</b> watch the directory
+/// for changes.</para>
+/// <para>Files are read on <b>first use</b>, not at construction, so a wrong path throws from
+/// <see cref="ListReports"/> or <see cref="Get"/> rather than from the constructor. Call
+/// <see cref="ListReports"/> once during startup if you would rather find out then — which for a
+/// path that comes from configuration is usually what you want.</para>
 /// </remarks>
 public sealed class DirectoryDefinitionSource : IReportDefinitionSource
 {

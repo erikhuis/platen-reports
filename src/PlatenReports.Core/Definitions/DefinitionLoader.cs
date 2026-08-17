@@ -7,9 +7,14 @@ namespace PlatenReports.Definitions;
 /// highest version per key.
 /// </summary>
 /// <remarks>
-/// <b>Fail fast.</b> An invalid published definition is a build defect, not a runtime
-/// condition — a host should learn about it on startup, not when someone prints a report. Every
-/// method here throws rather than skipping the bad document.
+/// <para><b>Throw, never skip.</b> An invalid published definition is a build defect, not a
+/// runtime condition, so nothing here quietly drops a bad document.</para>
+/// <para><b>When it throws depends on the source.</b>
+/// <see cref="InMemoryDefinitionSource"/> validates in its constructor.
+/// <see cref="EmbeddedResourceDefinitionSource"/> and <see cref="DirectoryDefinitionSource"/>
+/// load on first use, so a bad definition or a wrong path surfaces on the first call rather than
+/// at construction — a host that wants startup validation calls <c>ListReports()</c> once during
+/// boot, which is cheap and forces the load.</para>
 /// </remarks>
 internal static class DefinitionLoader
 {
