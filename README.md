@@ -27,7 +27,7 @@ report.
 | `PlatenReports.AspNetCore` | NuGet | Endpoint mapping, DI, and the authorization port | planned |
 | `PlatenReports.Sql` | NuGet | SQL data provider | placeholder |
 | `PlatenReports.Pdf` | NuGet | PDF layout + output | placeholder |
-| `@platen-reports/model` | npm | Document model and overlay algebra, for the designer and the conformance suite | planned |
+| `@platen-reports/model` | npm | Document model, overlay algebra and wire contracts. **No framework, no dependencies.** | shipped |
 | `@platen-reports/designer` | npm | React report designer | placeholder |
 
 Packages marked *placeholder* reserve the name and publish a stub; they do not do
