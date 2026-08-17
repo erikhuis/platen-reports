@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>PlatenReports.Abstractions</PackageId>
+    <Description>Contracts for Platen Reports: the report definition model and the ports a host implements (data providers, renderer, overlay store, asset provider, condition evaluator). Dependency-free by design.</Description>
+    <RootNamespace>PlatenReports</RootNamespace>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <!-- ==========================================================
+       This project must never gain a PackageReference.
+
+       Hosts implement IReportDataProvider against this package. If
+       these interfaces lived in Core, declaring a provider would
+       drag in Scriban and everything else the engine happens to
+       use. Keeping the contract layer dependency-free is also what
+       makes "the core is licence-clean" checkable rather than
+       claimed — there is nothing here to audit.
+
+       If a type you are adding needs a package, that type belongs
+       in PlatenReports.Core instead. The build enforces this: see
+       tests/PlatenReports.Abstractions.Tests.
+       ========================================================== -->
+
+</Project>

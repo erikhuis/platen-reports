@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/PlatenReports.Abstractions/PlatenReports.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- DependencyFreedomTests parses the project file it is asserting about. Copying it to the
+       output on every build is what keeps the assertion honest: the test reads the same file
+       that was just compiled, and cannot drift from it.
+
+       It is copied rather than located at run time because a CI build sets
+       ContinuousIntegrationBuild, which path-maps [CallerFilePath] to /_/… — so walking up
+       from the source path works locally and fails only in CI. -->
+  <ItemGroup>
+    <None Include="../../src/PlatenReports.Abstractions/PlatenReports.Abstractions.csproj"
+          Link="PlatenReports.Abstractions.csproj"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>
