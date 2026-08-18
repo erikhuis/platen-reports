@@ -1,0 +1,50 @@
+{
+  "name": "@platen-reports/model",
+  "version": "0.0.0",
+  "description": "Report definition model, customisation-overlay algebra and wire contracts for Platen Reports. No framework, no runtime dependencies.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Erik Huisman"
+  },
+  "homepage": "https://github.com/erikhuis/platen-reports#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erikhuis/platen-reports.git",
+    "directory": "packages/model"
+  },
+  "bugs": {
+    "url": "https://github.com/erikhuis/platen-reports/issues"
+  },
+  "keywords": [
+    "reporting",
+    "report-designer",
+    "pdf",
+    "json-schema"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5"
+  }
+}

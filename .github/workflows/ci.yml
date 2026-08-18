@@ -54,3 +54,31 @@ jobs:
             artifacts/*.nupkg
             artifacts/*.snupkg
           if-no-files-found: error
+
+  npm:
+    name: npm build · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r --filter './packages/**' typecheck
+
+      # Build before test: the packaging guard asserts against dist/, so a stale or missing
+      # bundle would make it vacuous rather than failing.
+      - name: Build
+        run: pnpm -r --filter './packages/**' build
+
+      - name: Test
+        run: pnpm -r --filter './packages/**' test
