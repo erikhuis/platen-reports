@@ -70,4 +70,29 @@ describe('designerModel', () => {
     expect(slice.endsWith('}')).toBe(true);
     expect(findJsonObjectRange(json, 'missing')).toBeNull();
   });
+
+  // Regression: a naive brace count treats `{`/`}` inside a JSON string value as structural,
+  // desyncing the depth counter on any unbalanced brace in report text/template content.
+  it('findJsonObjectRange ignores braces that appear inside string values', () => {
+    const withBraceInText: ReportDefinitionDoc = {
+      key: 'r', version: '1.0.0',
+      body: [
+        { id: 'note', type: 'text', text: 'Closing } only' },
+        { id: 'note2', type: 'text', text: 'Opening { only' },
+      ],
+    };
+    const json = JSON.stringify(withBraceInText, null, 2);
+
+    const range1 = findJsonObjectRange(json, 'note');
+    expect(range1).not.toBeNull();
+    const slice1 = json.slice(range1!.from, range1!.to);
+    expect(slice1.startsWith('{')).toBe(true);
+    expect(slice1.endsWith('}')).toBe(true);
+    expect(JSON.parse(slice1)).toEqual({ id: 'note', type: 'text', text: 'Closing } only' });
+
+    const range2 = findJsonObjectRange(json, 'note2');
+    expect(range2).not.toBeNull();
+    const slice2 = json.slice(range2!.from, range2!.to);
+    expect(JSON.parse(slice2)).toEqual({ id: 'note2', type: 'text', text: 'Opening { only' });
+  });
 });

@@ -154,10 +154,10 @@ export function collectAllIds(doc: ReportDefinitionDoc, overlay: ReportOverlayDo
   for (const s of overlay.suppress ?? []) ids.add(s);
   for (const ins of overlay.insert ?? []) {
     ids.add(ins.id);
-    const el = ins.element as AnyNode;
-    if (el?.id) ids.add(el.id);
-    for (const c of (el?.columns as AnyNode[] | undefined) ?? []) ids.add(c.id);
-    for (const p of (el?.pairs as AnyNode[] | undefined) ?? []) ids.add(p.id);
+    // Full subtree scan — a pending insert's nested children/columns/pairs are ids too, and
+    // nextId must never re-mint one of them (collectSubtreeIds is the one place this recursion
+    // is defined; re-deriving a shallow copy here previously missed nested `children`).
+    for (const id of collectSubtreeIds(ins.element)) ids.add(id);
   }
   return ids;
 }
@@ -546,6 +546,8 @@ export function insertElement(
 export function validateInserted(preview: MergePreview): OverlayProblem[] {
   const problems: OverlayProblem[] = [];
   const seen = new Set<string>();
+  // Shares the vocabulary (and now the element-type gate) with validateDefinition.
+  const known = new Set(['text', 'field', 'row', 'column', 'container', 'table', 'keyValueGrid', 'spacer', 'line', 'image', 'pageNumber']);
 
   const isBodySection = (id: string): boolean => {
     const inHeader = preview.displayDoc.pageHeader
@@ -572,6 +574,8 @@ export function validateInserted(preview: MergePreview): OverlayProblem[] {
     if (el.type === 'keyValueGrid') for (const p of el.pairs) registerId(p.id);
     if (!preview.meta.get(el.id)?.insertPatchId) continue;
 
+    if (!known.has(el.type)) { problems.push({ id: el.id, code: 'unknownElementType', values: { type: el.type } }); continue; }
+
     switch (el.type) {
       case 'text':
         if (!el.text || (typeof el.text === 'string' && el.text.trim() === '')) {
@@ -584,6 +588,14 @@ export function validateInserted(preview: MergePreview): OverlayProblem[] {
       case 'table':
         if (!el.bind) problems.push({ id: el.id, code: 'tableMissingBind' });
         else if (!el.columns?.length) problems.push({ id: el.id, code: 'tableMissingColumns' });
+        else for (const c of el.columns) {
+          if (!c.path && !c.template) problems.push({ id: c.id, code: 'columnMissingValue' });
+        }
+        break;
+      case 'keyValueGrid':
+        for (const p of el.pairs) {
+          if (!p.path && !p.template) problems.push({ id: p.id, code: 'pairMissingValue' });
+        }
         break;
       case 'image':
         if ((el.source ?? 'tenantLogo') !== 'tenantLogo') {

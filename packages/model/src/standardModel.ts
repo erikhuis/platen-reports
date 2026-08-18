@@ -10,7 +10,7 @@ import {
   childElements, ELEMENT_DEFAULTS, walkElements,
   type ReportDefinitionDoc, type ReportElementNode,
 } from './designerModel';
-import type { OverlayProblem } from './overlayModel';
+import { BODY_PSEUDO_ANCHOR, type OverlayProblem } from './overlayModel';
 import type { InsertTarget } from './designerEditing';
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -114,7 +114,10 @@ export function insertNode(
   doc: ReportDefinitionDoc, element: Record<string, unknown>, target: InsertTarget,
 ): ReportDefinitionDoc {
   const next = clone(doc);
-  if (target.anchor === '$body') {
+  if (target.anchor === BODY_PSEUDO_ANCHOR) {
+    // Mirrors overlayModel.ts's InsertInvalidPosition rejection: $body only supports
+    // appendInto — there is no sibling to be "before"/"after" at the document root.
+    if (target.position !== 'appendInto') return next;
     const body = ((next as unknown as { body?: AnyNode[] }).body ??= []);
     body.push(element as AnyNode);
     return next;
@@ -124,6 +127,11 @@ export function insertNode(
     if (arr) arr.push(element as AnyNode);
     return next;
   }
+  // before/after on a fixed-slot root (pageHeader/pageFooter) has no sibling array to splice
+  // into — locate() wraps it in a throwaway array for property mutation, which a splice would
+  // silently discard. Mirrors overlayModel.ts's InsertInvalidTarget rejection for the same case.
+  const d = next as unknown as { pageHeader?: AnyNode; pageFooter?: AnyNode };
+  if (target.anchor === d.pageHeader?.id || target.anchor === d.pageFooter?.id) return next;
   const hit = locate(next, target.anchor);
   if (hit) hit.array.splice(target.position === 'before' ? hit.index : hit.index + 1, 0, element as AnyNode);
   return next;
@@ -236,8 +244,11 @@ export function serializeDefinition(doc: ReportDefinitionDoc): string {
   // ELEMENT_DEFAULTS is typed as an open Record, so indexing it widens to `| undefined`
   // even for a key that is always present.
   const styleDefaults = ELEMENT_DEFAULTS.style!;
-  const stripNode = (node: AnyNode) => {
-    const typeDefaults = node.type ? ELEMENT_DEFAULTS[node.type] : undefined;
+  // `defaultsKey` lets callers pass the ELEMENT_DEFAULTS key explicitly for nodes with no
+  // `type` discriminant of their own (table columns, keyValueGrid pairs) — indexing by
+  // `node.type` for those is always `undefined`, silently skipping their default-elision.
+  const stripNode = (node: AnyNode, defaultsKey?: string) => {
+    const typeDefaults = ELEMENT_DEFAULTS[defaultsKey ?? node.type ?? ''];
     if (typeDefaults) {
       for (const [k, v] of Object.entries(typeDefaults)) {
         if (node[k] !== undefined && node[k] === v) delete node[k];
@@ -254,7 +265,7 @@ export function serializeDefinition(doc: ReportDefinitionDoc): string {
     // keyValueGrid.columns is a NUMBER (column count), not a table's column array —
     // only descend when it is genuinely an array of column elements.
     if (Array.isArray(node.columns)) for (const col of node.columns) stripNode(col);
-    for (const pair of node.pairs ?? []) stripNode(pair);
+    for (const pair of node.pairs ?? []) stripNode(pair, 'pair');
   };
   const d = stripped as { pageHeader?: AnyNode; body?: AnyNode[]; pageFooter?: AnyNode };
   if (d.pageHeader) stripNode(d.pageHeader);

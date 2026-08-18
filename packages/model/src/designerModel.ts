@@ -281,6 +281,30 @@ export function findSelection(doc: ReportDefinitionDoc, id: string): FoundSelect
 }
 
 /**
+ * Marks every character that lies inside a JSON string literal (including its delimiting
+ * quotes), so a brace-matching walk can skip `{`/`}` characters that appear in text/template
+ * values rather than treating them as structural.
+ */
+function computeJsonStringMask(json: string): boolean[] {
+  const mask = new Array<boolean>(json.length).fill(false);
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    if (inString) {
+      mask[i] = true;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') {
+      mask[i] = true;
+      inString = true;
+    }
+  }
+  return mask;
+}
+
+/**
  * Character range of the object owning `"id": "<id>"` inside pretty-printed JSON, by
  * brace-matching outward from the id property — lets the JSON panel highlight and
  * scroll the selected element's object into view without a JSON AST.
@@ -289,10 +313,14 @@ export function findJsonObjectRange(json: string, id: string): { from: number; t
   const needle = `"id": ${JSON.stringify(id)}`;
   const at = json.indexOf(needle);
   if (at < 0) return null;
+  // A `{`/`}` inside a string value (report text, a `{{ template }}` expression) is not
+  // structural — skip anything the mask marks as being inside a quoted string.
+  const inString = computeJsonStringMask(json);
   // Walk back to the object's opening brace.
   let depth = 0;
   let from = at;
   for (let i = at; i >= 0; i--) {
+    if (inString[i]) continue;
     const ch = json[i];
     if (ch === '}') depth++;
     else if (ch === '{') {
@@ -303,6 +331,7 @@ export function findJsonObjectRange(json: string, id: string): { from: number; t
   // Walk forward to the matching closing brace.
   depth = 0;
   for (let i = from; i < json.length; i++) {
+    if (inString[i]) continue;
     const ch = json[i];
     if (ch === '{') depth++;
     else if (ch === '}') {

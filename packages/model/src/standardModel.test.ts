@@ -46,6 +46,25 @@ describe('standardModel', () => {
     expect((col.body!.find((n) => n.id === 'tbl') as { columns: { id: string }[] }).columns.map((c) => c.id)).toEqual(['c1', 'c3', 'c2']);
   });
 
+  // Regression: locate() wraps pageHeader/pageFooter in a throwaway array (needed so
+  // setNodeProp can mutate the shared node reference); insertNode's before/after path used
+  // to splice into that throwaway array, so the insert silently vanished instead of failing
+  // or placing. Mirrors overlayModel.ts's InsertInvalidTarget rejection for the same anchor.
+  it('insertNode no-ops (does not silently corrupt) on before/after anchored at a fixed-slot root', () => {
+    const before = insertNode(doc(), { id: 'new', type: 'text', text: 'N' }, { anchor: 'hdr', position: 'after', section: 'header' });
+    expect(before).toEqual(doc());
+    const afterFooter = insertNode(doc(), { id: 'new2', type: 'text', text: 'N' }, { anchor: 'ftr', position: 'before', section: 'footer' });
+    expect(afterFooter).toEqual(doc());
+  });
+
+  // Regression: the $body branch used to ignore `position` entirely and always append —
+  // unlike overlayModel.ts's insertIntoSequence, which rejects non-appendInto positions on
+  // $body. Both engines share the InsertTarget contract and must reject the same input.
+  it('insertNode no-ops on $body with a position other than appendInto', () => {
+    const result = insertNode(doc(), { id: 'new', type: 'text', text: 'N' }, { anchor: '$body', position: 'before', section: 'body' });
+    expect(result).toEqual(doc());
+  });
+
   it('reorderSiblings moves within the same parent only', () => {
     const moved = reorderSiblings(doc(), 'body', 0, 2);
     expect(moved.body!.map((n) => n.id)).toEqual(['tbl', 'b', 'a']);
@@ -119,5 +138,19 @@ describe('standardModel', () => {
     const afterDelete = deleteNode(withGrid(), 'p1');
     const kv2 = afterDelete.body!.find((n) => n.id === 'kv') as { pairs: { id: string }[] };
     expect(kv2.pairs.map((p) => p.id)).toEqual(['p2']);
+  });
+
+  // Regression: pairs have no `type` discriminant, so keying ELEMENT_DEFAULTS off `node.type`
+  // never matched pair.format's default ('') — it was silently never stripped.
+  it('serializeDefinition elides a keyValueGrid pair format equal to its default', () => {
+    const withGrid = (): ReportDefinitionDoc => ({
+      schemaVersion: 1, key: 'r', version: '1.0.0', title: 'R', dataSource: 'src',
+      body: [{
+        id: 'kv', type: 'keyValueGrid',
+        pairs: [{ id: 'p1', label: 'L1', path: 'a', format: '' }],
+      }],
+    });
+    const json = JSON.parse(serializeDefinition(withGrid()));
+    expect(json.body[0].pairs[0].format).toBeUndefined();
   });
 });

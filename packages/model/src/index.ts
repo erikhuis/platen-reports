@@ -46,6 +46,7 @@ export {
   resolveLocalized,
   countChangedProps,
   childElements,
+  walkElements,
   findSelection,
   findJsonObjectRange,
 } from './designerModel';

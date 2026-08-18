@@ -174,6 +174,24 @@ describe('overlayModel — merge preview server-parity edge cases', () => {
     const problems = validateInserted(mergePreview(doc, null));
     expect(problems.some((p) => p.code === 'duplicateId' && p.id === 'dup')).toBe(true);
   });
+
+  // Regression: validateInserted had no keyValueGrid case, never checked a table's per-column
+  // path/template, and never flagged an unknown element type — validateDefinition (the
+  // standard-authoring mirror) already checked all three, so overlay-inserted content could
+  // silently save something direct authoring would reject.
+  it('validateInserted shares content rules with validateDefinition: pair/column values and unknown types', () => {
+    const overlay: ReportOverlayDoc = {
+      insert: [
+        { id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'grid-1', type: 'keyValueGrid', pairs: [{ id: 'gp-1', label: 'X' }] } },
+        { id: 'ins-2', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'tbl-1', type: 'table', bind: 'x', columns: [{ id: 'tc-1', header: 'H' }] } },
+        { id: 'ins-3', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'bogus-1', type: 'bogusType', text: 'x' } },
+      ],
+    };
+    const problems = validateInserted(mergePreview(standard(), overlay));
+    expect(problems.some((p) => p.code === 'pairMissingValue' && p.id === 'gp-1')).toBe(true);
+    expect(problems.some((p) => p.code === 'columnMissingValue' && p.id === 'tc-1')).toBe(true);
+    expect(problems.some((p) => p.code === 'unknownElementType' && p.id === 'bogus-1')).toBe(true);
+  });
 });
 
 describe('overlayModel — op compilation', () => {
@@ -240,6 +258,21 @@ describe('overlayModel — op compilation', () => {
     expect(nextId('txt', taken)).toBe('txt-4');
     expect(nextId('ins', taken)).toBe('ins-3');
     expect(nextId('tbl', taken)).toBe('tbl-1');
+  });
+
+  // Regression: collectAllIds used to harvest only an insert's top-level id plus one level of
+  // columns/pairs, never recursing into `children` — so a nested child id (like collectSubtreeIds
+  // finds) was invisible to nextId's collision check, and a second insert could mint a duplicate.
+  it('collectAllIds sees ids nested inside a pending insert\'s children, not just its top level', () => {
+    const overlay: ReportOverlayDoc = {
+      insert: [{
+        id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto',
+        element: { id: 'row-1', type: 'row', children: [{ id: 'txt-5', type: 'text', text: 'x' }] },
+      }],
+    };
+    const ids = collectAllIds(standard(), overlay);
+    expect(ids.has('txt-5')).toBe(true);
+    expect(nextId('txt', ids)).not.toBe('txt-5');
   });
 
   it('serializeOverlay emits only allowlisted top-level keys in stable order', () => {

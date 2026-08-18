@@ -41,6 +41,17 @@ describe('packaging', () => {
   it('imports nothing outside this package', () => {
     const offenders: string[] = [];
 
+    // Every syntactic shape that can reach for a module: `import x from '...'`, a bare
+    // side-effect `import '...'`, a dynamic `import('...')`, and CommonJS `require('...')`.
+    // A `from`-only scan misses the first two entirely — a bare or dynamic import of an
+    // external package would resolve (or fail to) without ever matching `from`.
+    const importPatterns = [
+      /\bfrom\s+['"]([^'"]+)['"]/g,
+      /^\s*import\s+['"]([^'"]+)['"]/gm,
+      /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+      /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    ];
+
     for (const file of readdirSync(sourceDir).filter((f) => f.endsWith('.ts'))) {
       // Comments are stripped first. Without that the scan matches prose and commented-out
       // code — including this file's own description of what it looks for, which is how the
@@ -48,15 +59,17 @@ describe('packaging', () => {
       const source = stripComments(readFileSync(join(sourceDir, file), 'utf8'));
       // A module specifier that is not relative. Test files may reach for the runner and for
       // node builtins; nothing that ships may reach for anything at all.
-      for (const match of source.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)) {
-        const specifier = match[1]!;
-        if (specifier.startsWith('.')) {
-          continue;
-        }
-        const allowedInTests = file.endsWith('.test.ts')
-          && (specifier === 'vitest' || specifier.startsWith('node:'));
-        if (!allowedInTests) {
-          offenders.push(`${file} → ${specifier}`);
+      for (const pattern of importPatterns) {
+        for (const match of source.matchAll(pattern)) {
+          const specifier = match[1]!;
+          if (specifier.startsWith('.')) {
+            continue;
+          }
+          const allowedInTests = file.endsWith('.test.ts')
+            && (specifier === 'vitest' || specifier.startsWith('node:'));
+          if (!allowedInTests) {
+            offenders.push(`${file} → ${specifier}`);
+          }
         }
       }
     }
