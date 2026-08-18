@@ -25,6 +25,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
+  <!-- The identifier rewriter is internal because how conditions reach NCalc is not something
+       a host should bind to. Its tests still go at it directly: it is the only string-munging
+       code here, and inferring its edge cases through Evaluate would test the parser instead. -->
   <ItemGroup>
     <InternalsVisibleTo Include="PlatenReports.NCalc.Tests" />
   </ItemGroup>
