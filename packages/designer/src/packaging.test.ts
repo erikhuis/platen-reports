@@ -97,3 +97,20 @@ describe('theme tokens', () => {
     expect(resolve(token)).toBeDefined();
   });
 });
+
+/**
+ * The workspace dependency, as a consumer would receive it.
+ *
+ * `@platen-reports/model` is declared `workspace:*`, which only pnpm rewrites to a real version
+ * when packing. Packing with npm copies the literal string into the published manifest, and
+ * every `npm install` of this package then fails on an unparseable version spec — a package
+ * that builds, packs and publishes perfectly, and cannot be installed.
+ *
+ * This asserts the source declaration is the one pnpm knows how to rewrite; `publish.yml` is
+ * what has to use `pnpm pack`, and its comment says why.
+ */
+describe('workspace dependency', () => {
+  it('declares the model with the workspace protocol pnpm can rewrite', () => {
+    expect(pkg.dependencies!['@platen-reports/model']).toMatch(/^workspace:/);
+  });
+});

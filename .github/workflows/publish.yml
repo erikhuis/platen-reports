@@ -193,6 +193,11 @@ jobs:
       # Directory.Build.props the only place a version is written, so the 0.0.0
       # sitting in each package.json is a placeholder overwritten here. The
       # rewrite is never committed; the runner is thrown away.
+      # `pnpm pack`, not `npm pack`. The designer depends on the model as `workspace:*`, and only
+      # pnpm rewrites that to a real version on the way out. npm has no workspace protocol, so it
+      # copies the literal string into the published manifest and every `npm install` of the
+      # designer then fails on an unparseable version spec — a package that builds, packs and
+      # publishes perfectly, and cannot be installed by anyone.
       - name: Pack npm packages
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -202,7 +207,7 @@ jobs:
             (
               cd "packages/$pkg"
               npm version "$VERSION" --no-git-tag-version --allow-same-version
-              npm pack --pack-destination ../../artifacts
+              pnpm pack --pack-destination ../../artifacts
             )
           done
 
