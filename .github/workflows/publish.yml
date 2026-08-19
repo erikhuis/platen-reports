@@ -179,10 +179,15 @@ jobs:
 
       # `files` in packages/model/package.json ships dist/, which is gitignored —
       # so packing without building first produces a package whose entry points
-      # resolve to nothing. The designer has no build yet (still a placeholder);
-      # --if-present covers both without special-casing either.
+      # resolve to nothing.
+      #
+      # No --if-present: with `pnpm -r <script> <args>`, everything after the
+      # script name is forwarded TO the script, so the flag reached tsup as
+      # `tsup --if-present` and failed the release on an unknown option. It was
+      # never needed — pnpm -r already skips a package that lacks the script,
+      # which is how the still-script-less designer passes here and in ci.yml.
       - name: Build packages
-        run: pnpm -r --filter './packages/**' build --if-present
+        run: pnpm -r --filter './packages/**' build
 
       # The npm packages carry no version of their own — docs/versioning.md makes
       # Directory.Build.props the only place a version is written, so the 0.0.0
