@@ -22,11 +22,24 @@ the non-goals in the README.
 - **Upstream:** https://github.com/scriban/scriban
 - **Licence text:** https://github.com/scriban/scriban/blob/master/license.txt
 
+## Microsoft.Extensions.DependencyInjection.Abstractions
+
+- **Purpose:** the `IServiceCollection` that `PlatenReports.NCalc`'s one-line
+  `AddNCalcReportConditions()` opt-in extends. Abstractions only — the packages
+  reference the contract assembly, never a container implementation, so a host is
+  free to use any DI container or none.
+- **Version at extraction:** 10.0.7
+- **Licence:** MIT License
+- **Upstream:** https://github.com/dotnet/runtime
+- **Licence text:** https://github.com/dotnet/runtime/blob/main/LICENSE.TXT
+
 ## Microsoft.Extensions.Logging.Abstractions
 
 - **Purpose:** the `ILogger<T>` the engine writes merge warnings and render failures to.
   Abstractions only — the engine takes no logging *implementation*, so a host keeps its own.
-- **Version at extraction:** 10.0.0
+- **Version at extraction:** 10.0.7 — raised from 10.0.0 by NCalcSync, whose
+  transitive floor is 10.0.7; central transitive pinning makes a lower version a
+  restore error rather than a silent downgrade.
 - **Licence:** MIT License
 - **Upstream:** https://github.com/dotnet/runtime
 - **Licence text:** https://github.com/dotnet/runtime/blob/main/LICENSE.TXT
@@ -73,6 +86,11 @@ across references `QuestPDF.*`.
 ---
 
 ## Maintaining this file
+
+This file covers **runtime** dependencies — what a consumer of the published
+packages actually acquires. Test-only packages (xunit, FluentAssertions,
+`Microsoft.Extensions.DependencyInjection`) ship in nothing and are deliberately
+not listed.
 
 Re-verify licence identifiers at each release rather than trusting this file:
 upstream projects do relicense. `dotnet list package --include-transitive` plus

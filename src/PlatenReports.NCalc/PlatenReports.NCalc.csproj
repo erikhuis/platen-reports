@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>PlatenReports.NCalc</PackageId>
+    <Description>NCalc-backed condition evaluator for Platen Reports: evaluates and validates element visibleIf expressions. Optional — a host that never writes a condition takes no expression dependency.</Description>
+    <RootNamespace>PlatenReports.NCalc</RootNamespace>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../PlatenReports.Abstractions/PlatenReports.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- ==========================================================
+       Deliberately does NOT reference PlatenReports.Core. This is
+       one implementation of one port; wiring it up is the host's
+       choice, which is the whole reason it is a separate package.
+
+       DependencyInjection.Abstractions buys the one-line AddX()
+       opt-in and nothing else — it is the contract assembly, not
+       the container.
+       ========================================================== -->
+  <ItemGroup>
+    <PackageReference Include="NCalcSync" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <!-- The identifier rewriter is internal because how conditions reach NCalc is not something
+       a host should bind to. Its tests still go at it directly: it is the only string-munging
+       code here, and inferring its edge cases through Evaluate would test the parser instead. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="PlatenReports.NCalc.Tests" />
+  </ItemGroup>
+
+</Project>
