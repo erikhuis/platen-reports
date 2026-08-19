@@ -74,6 +74,30 @@ app.MapReportEndpoints("/reports")
    .RequireRateLimiting("reports");
 ```
 
+### Mounting the designer
+
+`@platen-reports/designer` is React and ships `'use client'`, so it drops into a Next.js app
+directly. Everything host-specific arrives through one provider:
+
+```tsx
+<ReportDesignerProvider
+  t={translate}                 // any scoped translator; DESIGNER_MESSAGES ships the wording
+  locale={locale}
+  canEdit={mayManageDefinitions}
+  api={reportsApiClient}        // your binding of ReportsApiClient
+  definitionDirectory="reports/definitions"   // optional: shown in the export dialog
+  onBack={() => router.back()}
+>
+  <DesignerShell reportKey={key} data={loaded} onSaved={reload} />
+</ReportDesignerProvider>
+```
+
+React, MUI and emotion are peer dependencies — the designer never brings its own copy. It renders
+against an unmodified `createTheme()` and ships no stylesheet.
+
+With no i18n library of your own, `createDesignerTranslate(locale)` returns a translator over the
+bundle for that locale.
+
 ### Authorization is yours
 
 There is **no default `IReportAuthorizer`**, and that is deliberate: a permissive default would

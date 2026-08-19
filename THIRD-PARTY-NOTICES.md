@@ -72,6 +72,23 @@ the non-goals in the README.
 
 ---
 
+## lucide-react
+
+- **Purpose:** the icon set the report designer renders. A real dependency rather
+  than a peer: it draws SVG and holds no shared state, so two copies in a host's
+  tree are wasteful but harmless — unlike React, MUI or emotion.
+- **Version at extraction:** 1.33.0
+- **Licence:** ISC License
+- **Upstream:** https://github.com/lucide-icons/lucide
+- **Licence text:** https://github.com/lucide-icons/lucide/blob/main/LICENSE
+
+## Peer dependencies of `@platen-reports/designer`
+
+React, `react-dom`, `@mui/material`, `@emotion/react` and `@emotion/styled` are
+**peer** dependencies: the designer is compiled against them but ships none of
+them, and a host supplies its own. They are listed here for completeness rather
+than because this project distributes them — all are MIT.
+
 ## Deliberately absent: QuestPDF
 
 The renderer in the origin codebase was built on **QuestPDF**, which is *not*
@@ -87,10 +104,11 @@ across references `QuestPDF.*`.
 
 ## Maintaining this file
 
-This file covers **runtime** dependencies — what a consumer of the published
-packages actually acquires. Test-only packages (xunit, FluentAssertions,
-`Microsoft.Extensions.DependencyInjection`) ship in nothing and are deliberately
-not listed.
+This file covers **runtime** dependencies on both sides — NuGet and npm — meaning
+what a consumer of the published packages actually acquires. Test-only packages
+(xunit, FluentAssertions, `Microsoft.Extensions.DependencyInjection`,
+`Microsoft.AspNetCore.TestHost`, vitest, Testing Library) ship in nothing and are
+deliberately not listed.
 
 Re-verify licence identifiers at each release rather than trusting this file:
 upstream projects do relicense. `dotnet list package --include-transitive` plus
