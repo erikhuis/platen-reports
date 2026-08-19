@@ -28,7 +28,7 @@ report.
 | `PlatenReports.Sql` | NuGet | SQL data provider | placeholder |
 | `PlatenReports.Pdf` | NuGet | PDF layout + output | placeholder |
 | `@platen-reports/model` | npm | Document model, overlay algebra and wire contracts. **No framework, no dependencies.** | shipped |
-| `@platen-reports/designer` | npm | React report designer | placeholder |
+| `@platen-reports/designer` | npm | React report designer | shipped |
 
 Packages marked *placeholder* reserve the name and publish a stub; they do not do
 anything yet. The engine is being extracted in phases and this table tracks it.

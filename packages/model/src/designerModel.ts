@@ -197,7 +197,11 @@ export function resolveLocalized(value: LocalizedTextValue | undefined, lang: st
  * omitted from the JSON and displayed un-highlighted; the inspector's Advanced badges
  * count properties that differ.
  */
-export const ELEMENT_DEFAULTS: Record<string, Record<string, unknown>> = {
+// Deliberately un-annotated: the inferred literal-key type is what makes
+// `ELEMENT_DEFAULTS.text` safe for consumers under `noUncheckedIndexedAccess`. Annotating it
+// as an open Record widens every access to `| undefined` and pushes a non-null assertion into
+// every call site in the designer.
+export const ELEMENT_DEFAULTS = {
   style: {
     fontSize: 9, bold: false, italic: false, align: 'left', color: '', backgroundColor: '',
     paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,

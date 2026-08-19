@@ -248,7 +248,12 @@ export function serializeDefinition(doc: ReportDefinitionDoc): string {
   // `type` discriminant of their own (table columns, keyValueGrid pairs) — indexing by
   // `node.type` for those is always `undefined`, silently skipping their default-elision.
   const stripNode = (node: AnyNode, defaultsKey?: string) => {
-    const typeDefaults = ELEMENT_DEFAULTS[defaultsKey ?? node.type ?? ''];
+    // ELEMENT_DEFAULTS carries literal keys so consumers can reach them safely under
+    // noUncheckedIndexedAccess; this is the one place that indexes it dynamically, and the cast
+    // is where that narrowness gets paid for.
+    const typeDefaults = ELEMENT_DEFAULTS[
+      (defaultsKey ?? node.type ?? '') as keyof typeof ELEMENT_DEFAULTS
+    ] as Record<string, unknown> | undefined;
     if (typeDefaults) {
       for (const [k, v] of Object.entries(typeDefaults)) {
         if (node[k] !== undefined && node[k] === v) delete node[k];
