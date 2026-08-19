@@ -1,7 +1,7 @@
 name: Publish
 
-# Publishes every package this repository ships — the .NET packages to
-# nuget.org and @platen-reports/designer to npm — from one tag, in lockstep.
+# Publishes every package this repository ships — five to nuget.org and two to
+# npm — from one tag, in lockstep.
 # See docs/versioning.md: equal versions are conformant, so the two registries
 # must not drift.
 #
@@ -21,10 +21,13 @@ name: Publish
 # Plus a NUGET_USER secret holding the nuget.org username (profile name, not
 # the email address).
 #
-# Setup, once, on npmjs.com. The scope and the placeholder are already in place
-# — @platen-reports/designer@0.0.0 was published by hand — which is what npm
-# requires before a trusted publisher can be bound to a package at all. The
-# binding itself is Package → Settings → Trusted Publisher → GitHub Actions:
+# Setup, once per npm package. npm will not bind a trusted publisher to a
+# package that does not exist yet, so each one needs a single hand publish
+# first — that is what @platen-reports/designer@0.0.0 was for. Any new npm
+# package added to this workflow needs the same two steps before its first
+# release, or the run dies at its publish having already pushed the ones
+# before it.
+# The binding is Package → Settings → Trusted Publisher → GitHub Actions:
 #   Organization or user: erikhuis
 #   Repository:           platen-reports
 #   Workflow filename:    publish.yml
@@ -169,21 +172,34 @@ jobs:
       - name: Pack
         run: dotnet pack --no-build --configuration Release --output artifacts
 
-      # The npm package carries no version of its own — docs/versioning.md makes
+      - uses: pnpm/action-setup@v4
+
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+
+      # `files` in packages/model/package.json ships dist/, which is gitignored —
+      # so packing without building first produces a package whose entry points
+      # resolve to nothing. The designer has no build yet (still a placeholder);
+      # --if-present covers both without special-casing either.
+      - name: Build packages
+        run: pnpm -r --filter './packages/**' build --if-present
+
+      # The npm packages carry no version of their own — docs/versioning.md makes
       # Directory.Build.props the only place a version is written, so the 0.0.0
-      # sitting in package.json is a placeholder overwritten here. The rewrite is
-      # never committed; the runner is thrown away.
-      #
-      # There is no build step because the designer is still a placeholder. When
-      # it has sources, the build belongs here, before the pack.
-      - name: Pack designer
-        working-directory: packages/designer
+      # sitting in each package.json is a placeholder overwritten here. The
+      # rewrite is never committed; the runner is thrown away.
+      - name: Pack npm packages
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          npm pack --pack-destination ../../artifacts
+          for pkg in model designer; do
+            (
+              cd "packages/$pkg"
+              npm version "$VERSION" --no-git-tag-version --allow-same-version
+              npm pack --pack-destination ../../artifacts
+            )
+          done
 
       # Everything is packed and nothing is published yet: this is the last
       # point at which a wrong version costs nothing. Both registries are
@@ -196,9 +212,15 @@ jobs:
           set -euo pipefail
           ls -l artifacts
           missing=0
-          for f in "PlatenReports.Core.$VERSION.nupkg" \
+          # Every package this repo publishes. This list was written when the repo
+          # had four and silently stayed at four while the carve added more — so a
+          # missing package passed verification. Add to it when a package is added.
+          for f in "PlatenReports.Abstractions.$VERSION.nupkg" \
+                   "PlatenReports.Core.$VERSION.nupkg" \
+                   "PlatenReports.NCalc.$VERSION.nupkg" \
                    "PlatenReports.Sql.$VERSION.nupkg" \
                    "PlatenReports.Pdf.$VERSION.nupkg" \
+                   "platen-reports-model-$VERSION.tgz" \
                    "platen-reports-designer-$VERSION.tgz"; do
             if [ ! -f "artifacts/$f" ]; then
               echo "::error::artifacts/$f was not produced; refusing to publish."
@@ -215,7 +237,7 @@ jobs:
       #
       # Publishing the tarball rather than the directory ships exactly the bits
       # the verify step looked at, matching how the NuGet half works.
-      - name: Publish designer (npm)
+      - name: Publish npm packages
         env:
           VERSION: ${{ steps.version.outputs.version }}
           NPM_TAG: ${{ steps.version.outputs.npm_tag }}
@@ -231,10 +253,16 @@ jobs:
           #
           # The ./ is load-bearing: npm reads a bare a/b argument as the GitHub
           # shorthand owner/repo and tries to clone it.
-          npm publish "./artifacts/platen-reports-designer-$VERSION.tgz" \
-            --provenance \
-            --tag "$NPM_TAG" \
-            --loglevel verbose
+          #
+          # model first: the designer depends on it, so a run that dies between
+          # the two leaves a resolvable model without a designer rather than a
+          # designer that cannot resolve its dependency.
+          for pkg in model designer; do
+            npm publish "./artifacts/platen-reports-$pkg-$VERSION.tgz" \
+              --provenance \
+              --tag "$NPM_TAG" \
+              --loglevel verbose
+          done
 
       # Request the short-lived key as late as possible: it expires after an
       # hour, and each OIDC token buys exactly one key.
