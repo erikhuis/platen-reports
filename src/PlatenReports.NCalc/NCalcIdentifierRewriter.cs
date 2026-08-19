@@ -71,7 +71,10 @@ internal static class NCalcIdentifierRewriter
                 continue;
             }
 
-            // Try to match an identifier possibly followed by `.identifier` segments.
+            // Try to match an identifier possibly followed by `.identifier` segments. This branch
+            // only enters on a letter or underscore, so a decimal literal like `1.5` — which
+            // starts with a digit — never reaches it at all; it falls through to the plain
+            // character-append case below instead, one character at a time, untouched.
             if (char.IsLetter(c) || c == '_')
             {
                 int start = i;
@@ -80,7 +83,7 @@ internal static class NCalcIdentifierRewriter
                     i++;
                 }
                 string token = expression.AsSpan(start, i - start).ToString();
-                if (token.Contains('.') && !LooksLikeNumber(token))
+                if (token.Contains('.'))
                 {
                     sb.Append('[').Append(token).Append(']');
                 }
@@ -98,10 +101,5 @@ internal static class NCalcIdentifierRewriter
         return sb.ToString();
     }
 
-    private static bool IsIdentCharOrDot(char c) =>
-        char.IsLetterOrDigit(c) || c == '_' ||
-        // Only consume a dot if it is followed by another identifier character (keeps `.5` etc. alone).
-        c == '.';
-
-    private static bool LooksLikeNumber(string token) => token.Length > 0 && char.IsDigit(token[0]);
+    private static bool IsIdentCharOrDot(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '.';
 }
