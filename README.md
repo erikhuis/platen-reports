@@ -42,6 +42,53 @@ audit.
 All packages in this repository share one version and are released in lockstep.
 **Equal versions are conformant** — pin both sides to the same number.
 
+## Wiring it into a host
+
+`PlatenReports.AspNetCore` maps the whole reporting surface as minimal APIs — catalogue,
+definitions, field trees, overlay CRUD, render and preview — under a prefix you choose.
+
+```csharp
+builder.Services
+    .AddPlatenReports()                 // the engine
+    .AddNCalcReportConditions();        // optional: visibleIf support
+
+// The ports the engine cannot invent. Yours:
+builder.Services.AddSingleton<IReportDefinitionSource>(/* … */);
+builder.Services.AddSingleton<IReportDataProviderRegistry>(/* … */);
+builder.Services.AddSingleton<IReportRenderer>(/* … */);
+builder.Services.AddSingleton<IReportOverlayStore>(/* … */);
+builder.Services.AddSingleton<IReportAssetProvider>(/* … */);
+builder.Services.AddSingleton<IReportAuthorizer, MyReportAuthorizer>();
+
+app.MapReportEndpoints();               // defaults to /api/v1/reports
+```
+
+`MapReportEndpoints` returns the route group, so your own conventions layer on top:
+
+```csharp
+app.MapReportEndpoints("/reports")
+   .RequireAuthorization()
+   .RequireRateLimiting("reports");
+```
+
+### Authorization is yours
+
+There is **no default `IReportAuthorizer`**, and that is deliberate: a permissive default would
+open every reporting endpoint in any host that forgot to register one. With none registered the
+endpoints fail closed — resolution throws and nothing is served.
+
+Every endpoint asks before doing any work and answers a plain `403` when refused. It never
+issues a redirect, so a browser-facing host does not get a login page where it expected an API
+answer.
+
+`CanRenderAsync` is asked per report and receives the permission the definition declares, because
+a definition may name a permission covering the *data* it prints rather than the act of printing.
+Note that an unknown report key also arrives with a `null` permission — allowing lets the endpoint
+answer `404`, denying hides whether the report exists. Both are reasonable; pick on purpose.
+
+For samples and local development, `AddAllowAllReportAuthorizer()` opens everything and logs a
+warning at startup saying so.
+
 ## Non-goals
 
 These are out of scope by decision, not by omission. Scope creep into a general
