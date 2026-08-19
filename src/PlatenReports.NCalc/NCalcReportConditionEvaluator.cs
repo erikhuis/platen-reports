@@ -1,5 +1,5 @@
+using System.Globalization;
 using NCalc;
-using NCalc.Exceptions;
 using NCalc.Factories;
 using NCalc.Handlers;
 
@@ -21,20 +21,85 @@ namespace PlatenReports.NCalc;
 public sealed class NCalcReportConditionEvaluator : IReportConditionEvaluator
 {
     /// <remarks>
-    /// Callable functions only. <c>not</c>, <c>and</c> and <c>or</c> are deliberately absent:
-    /// they are NCalc *operators* (<c>!</c>, <c>&amp;&amp;</c>, <c>||</c>), not functions, so
+    /// <c>not</c>, <c>and</c> and <c>or</c> are deliberately absent from both sets below: they
+    /// are NCalc *operators* (<c>!</c>, <c>&amp;&amp;</c>, <c>||</c>), not functions, so
     /// allowlisting them let <c>and(x, y)</c> pass validation and then die at render with
     /// FunctionNotFound. Validation blessing an expression that can never evaluate is worse than
-    /// not checking it. The operator forms are unaffected — operators never reach the allowlist.
+    /// not checking it. The operator forms are unaffected — operators never reach either set.
+    /// <para><c>in</c> is deliberately absent for the same reason, from a different angle: the
+    /// intended usage, <c>x in (a, b, c)</c>, parses as a BinaryExpression, not a Function, so it
+    /// never needs an allowlist entry. The function-call spelling, <c>in(x, a, b, c)</c>, does
+    /// reach NCalc's function dispatch — but silently evaluates to something other than the infix
+    /// form, with no error. Allowlisting it would repeat the and/or problem without even the mercy
+    /// of a clear FunctionNotFound at render.</para>
     /// </remarks>
-    private static readonly HashSet<string> AllowedFunctions = new(StringComparer.OrdinalIgnoreCase)
+    private static class Functions
     {
-        "if", "in",
-        "Round", "Floor", "Ceiling",
-        "Contains", "StartsWith", "EndsWith",
-    };
+        /// <summary>
+        /// Left unimplemented here — calls fall through <c>EvaluateFunction</c> untouched
+        /// to NCalc's own built-in dispatch, which matches by exact spelling, case-sensitively.
+        /// Matched here with <see cref="StringComparer.Ordinal"/> for the same reason: an
+        /// allowlist that accepted <c>round(...)</c> would let it pass Validate and then die at
+        /// Evaluate with FunctionNotFound — Validate and Evaluate must agree on exactly what NCalc
+        /// itself will actually resolve.
+        /// </summary>
+        internal static readonly HashSet<string> NCalcBuiltins = new(StringComparer.Ordinal)
+        {
+            "if", "Round", "Floor", "Ceiling",
+        };
+
+        /// <summary>
+        /// Implemented directly in <c>EvaluateFunction</c>, which dispatches by name
+        /// case-insensitively — so the allowlist matches case-insensitively too, deliberately
+        /// unlike <see cref="NCalcBuiltins"/>.
+        /// </summary>
+        internal static readonly HashSet<string> Custom = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Contains", "StartsWith", "EndsWith",
+        };
+
+        internal static bool IsAllowed(string name) => NCalcBuiltins.Contains(name) || Custom.Contains(name);
+    }
 
     // ─── Evaluate ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A condition long or deeply-nested enough to overflow NCalc's recursive-descent parser
+    /// would crash the whole host process — a .NET StackOverflowException cannot be caught. Both
+    /// caps are generous for anything a real <c>visibleIf</c> would need, and are checked before
+    /// the expression ever reaches NCalc.
+    /// </summary>
+    private const int MaxExpressionLength = 2_000;
+    private const int MaxNestingDepth = 64;
+
+    private static bool ExceedsComplexityLimits(string expression, out string? reason)
+    {
+        if (expression.Length > MaxExpressionLength)
+        {
+            reason = $"expression exceeds the maximum length of {MaxExpressionLength} characters.";
+            return true;
+        }
+
+        int depth = 0;
+        foreach (char c in expression)
+        {
+            if (c is '(' or '[')
+            {
+                if (++depth > MaxNestingDepth)
+                {
+                    reason = $"expression nesting exceeds the maximum depth of {MaxNestingDepth}.";
+                    return true;
+                }
+            }
+            else if (c is ')' or ']')
+            {
+                depth--;
+            }
+        }
+
+        reason = null;
+        return false;
+    }
 
     /// <inheritdoc />
     public ConditionResult Evaluate(string expression, IReadOnlyDictionary<string, object?> scope)
@@ -44,6 +109,11 @@ public sealed class NCalcReportConditionEvaluator : IReportConditionEvaluator
         if (string.IsNullOrWhiteSpace(expression))
         {
             return ConditionResult.Shown;
+        }
+
+        if (ExceedsComplexityLimits(expression, out string? reason))
+        {
+            return ConditionResult.Hidden(reason);
         }
 
         Expression expr;
@@ -77,13 +147,13 @@ public sealed class NCalcReportConditionEvaluator : IReportConditionEvaluator
 
         expr.EvaluateFunction += (name, args) =>
         {
-            if (!AllowedFunctions.Contains(name))
+            if (!Functions.IsAllowed(name))
             {
                 throw new DisallowedFunctionException(name);
             }
 
-            // NCalc has no string helpers of its own; supply the three in the allowlist and let
-            // everything else fall through to NCalc's built-ins (if, in, Round, Floor, Ceiling).
+            // NCalc has no string helpers of its own; supply the three we implement and let
+            // everything else fall through to NCalc's built-ins (if, Round, Floor, Ceiling).
             if (name.Equals("StartsWith", StringComparison.OrdinalIgnoreCase))
             {
                 args.Result = StringBinOp(args, (a, b) => a.StartsWith(b, StringComparison.Ordinal));
@@ -131,14 +201,15 @@ public sealed class NCalcReportConditionEvaluator : IReportConditionEvaluator
             return [];
         }
 
+        if (ExceedsComplexityLimits(expression, out string? reason))
+        {
+            return [reason!];
+        }
+
         LogicalExpression ast;
         try
         {
             ast = LogicalExpressionFactory.Create(NCalcIdentifierRewriter.WrapDottedIdentifiers(expression));
-        }
-        catch (NCalcParserException ex)
-        {
-            return [$"does not parse: {ex.Message}"];
         }
         catch (Exception ex)
         {
@@ -171,9 +242,16 @@ public sealed class NCalcReportConditionEvaluator : IReportConditionEvaluator
                 Walk(t.RightExpression, knownPaths, errors);
                 return;
             case Function f:
-                if (!AllowedFunctions.Contains(f.Identifier.Name))
+                if (!Functions.IsAllowed(f.Identifier.Name))
                 {
                     errors.Add($"function '{f.Identifier.Name}' is not allowed.");
+                }
+                else if (Functions.Custom.Contains(f.Identifier.Name) && f.Parameters.Count != 2)
+                {
+                    // Mirrors StringBinOp's arity check — without this, Validate blesses a call
+                    // that Evaluate can never resolve (the same class of bug as the casing gap
+                    // above, just triggered by argument count instead of spelling).
+                    errors.Add($"function '{f.Identifier.Name}' expects exactly 2 arguments.");
                 }
 
                 foreach (var p in f.Parameters)
@@ -224,7 +302,10 @@ public sealed class NCalcReportConditionEvaluator : IReportConditionEvaluator
             throw new NullOperandException();
         }
 
-        return op(Convert.ToString(left)!, Convert.ToString(right)!);
+        // Invariant, not current-culture: a decimal like 1250.75 must not turn into "1250,75"
+        // (and stop containing '.') just because the host process's culture is de-DE. A print
+        // pipeline's output must not depend on the server's locale.
+        return op(Convert.ToString(left, CultureInfo.InvariantCulture)!, Convert.ToString(right, CultureInfo.InvariantCulture)!);
     }
 
     // ─── Sentinel exceptions ──────────────────────────────────────────────────

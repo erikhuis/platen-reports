@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Xunit;
 
@@ -182,6 +183,44 @@ public class NCalcReportConditionEvaluatorTests
         Evaluator.Validate("Round(item.cost, 2) > 1", KnownPaths).Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("round")]
+    [InlineData("ROUND")]
+    [InlineData("Round")] // exact NCalc spelling still passes — this stays a valid call.
+    public void Validate_agrees_with_Evaluate_about_NCalc_builtin_casing(string spelling)
+    {
+        // Regression: AllowedFunctions used to be case-insensitive for everything, so Validate
+        // blessed `round(...)`/`ROUND(...)` as valid — but NCalc's own built-in dispatch for
+        // functions we don't implement ourselves (Round/Floor/Ceiling/if) matches case-sensitively,
+        // so Evaluate died at render with "Function not found". Validate and Evaluate must agree.
+        var expression = $"{spelling}(item.cost, 2) > 1";
+        var validateErrors = Evaluator.Validate(expression, KnownPaths);
+        var evaluateResult = Evaluator.Evaluate(expression, Scope());
+
+        if (spelling == "Round")
+        {
+            validateErrors.Should().BeEmpty();
+            evaluateResult.Error.Should().BeNull();
+        }
+        else
+        {
+            validateErrors.Should().ContainSingle().Which.Should().Contain(spelling);
+            evaluateResult.Visible.Should().BeFalse();
+            evaluateResult.Error.Should().Contain(spelling);
+        }
+    }
+
+    [Theory]
+    [InlineData("StartsWith(item.status)")]
+    [InlineData("Contains(item.status)")]
+    public void Validate_rejects_a_string_function_called_with_the_wrong_argument_count(string expression)
+    {
+        // Regression: Validate never checked argument count, so it blessed a call StringBinOp
+        // would always reject at Evaluate time with "Expected exactly 2 string arguments."
+        Evaluator.Validate(expression, KnownPaths).Should().ContainSingle().Which.Should().Contain("2 arguments");
+        Evaluator.Evaluate(expression, Scope()).Visible.Should().BeFalse();
+    }
+
     [Fact]
     public void Validate_accepts_a_well_formed_in_list() => Evaluator.Validate("item.status in ('Active', 'Retired')", KnownPaths).Should().BeEmpty();
 
@@ -201,6 +240,21 @@ public class NCalcReportConditionEvaluatorTests
     {
         Evaluator.Validate("item.status in ('Active', Secret(1))", KnownPaths)
             .Should().ContainSingle().Which.Should().Contain("Secret");
+    }
+
+    [Fact]
+    public void In_called_as_an_explicit_function_is_rejected_by_both_Validate_and_Evaluate()
+    {
+        // Regression: `in` used to be allowlisted, so `in(x, a, b, c)` passed Validate — but it
+        // is not the same thing as the infix `x in (a, b, c)` form; it silently evaluated to
+        // Hidden with no error at all, worse than a FunctionNotFound because there was nothing to
+        // investigate. `in` is now excluded the same way and/or are, for the same reason.
+        Evaluator.Validate("in(item.cost, 1, 2, 3)", KnownPaths)
+            .Should().ContainSingle().Which.Should().Contain("in");
+
+        var result = Evaluator.Evaluate("in(item.cost, 1, 2, 3)", Scope());
+        result.Visible.Should().BeFalse();
+        result.Error.Should().Contain("in");
     }
 
     [Theory]
@@ -319,5 +373,82 @@ public class NCalcReportConditionEvaluatorTests
 
         result.Visible.Should().BeFalse();
         result.Error.Should().BeNull();
+    }
+
+    // ─── Culture independence ──────────────────────────────────────────────────
+
+    [Fact]
+    public void Evaluate_string_helpers_are_not_sensitive_to_the_current_culture()
+    {
+        // Regression: StringBinOp converted operands with Convert.ToString(value) — the current-
+        // culture overload — so `Contains(item.cost, '.')` was true under en-US/invariant (where
+        // 1250.75 formats with a '.') but false under de-DE (where it formats as "1250,75"). A
+        // print pipeline's output must not depend on the server process's locale.
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+            var invariant = Evaluator.Evaluate("Contains(item.cost, '.')", Scope());
+
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+            var german = Evaluator.Evaluate("Contains(item.cost, '.')", Scope());
+
+            invariant.Visible.Should().BeTrue();
+            german.Visible.Should().Be(invariant.Visible);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    // ─── Complexity limits: a StackOverflowException cannot be caught ─────────
+
+    [Fact]
+    public void Evaluate_rejects_a_deeply_nested_expression_instead_of_crashing_the_process()
+    {
+        // Regression: NCalc's recursive-descent parser overflows the stack on deep nesting, and
+        // a .NET StackOverflowException always kills the process — no catch block runs. Rejecting
+        // past a sane nesting depth, before the expression ever reaches NCalc, is the only way to
+        // keep this within the "never throws for content reasons" contract.
+        var expression = new string('(', 200) + "true" + new string(')', 200);
+
+        var act = () => Evaluator.Evaluate(expression, Scope());
+
+        act.Should().NotThrow();
+        var result = act();
+        result.Visible.Should().BeFalse();
+        result.Error.Should().Contain("nesting");
+    }
+
+    [Fact]
+    public void Validate_rejects_a_deeply_nested_expression_instead_of_crashing_the_process()
+    {
+        var expression = new string('(', 200) + "true" + new string(')', 200);
+
+        var act = () => Evaluator.Validate(expression, KnownPaths);
+
+        act.Should().NotThrow();
+        act().Should().ContainSingle().Which.Should().Contain("nesting");
+    }
+
+    [Fact]
+    public void Evaluate_rejects_an_excessively_long_expression()
+    {
+        var expression = "item.status = 'Active'" + new string(' ', 3_000);
+
+        var result = Evaluator.Evaluate(expression, Scope());
+
+        result.Visible.Should().BeFalse();
+        result.Error.Should().Contain("length");
+    }
+
+    [Fact]
+    public void Evaluate_accepts_nesting_well_within_the_limit()
+    {
+        // The guard must not reject anything a real visibleIf would plausibly need.
+        var expression = new string('(', 10) + "item.isCritical" + new string(')', 10);
+
+        Evaluator.Evaluate(expression, Scope()).Visible.Should().BeTrue();
     }
 }
