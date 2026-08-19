@@ -28,9 +28,10 @@
     <!-- The container itself, needed only to BuildServiceProvider in a test. The packages
          reference DependencyInjection.Abstractions and never the implementation. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
-    <!-- WebApplicationFactory, for exercising MapReportEndpoints over a real pipeline
-         rather than asserting against a route table. -->
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.7" />
+    <!-- TestServer, so the endpoint tests run over a real request pipeline rather than
+         calling the route handlers directly. Not in the ASP.NET Core shared framework;
+         referenced directly rather than pulled in transitively via Mvc.Testing. -->
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.7" />
   </ItemGroup>
 
 </Project>

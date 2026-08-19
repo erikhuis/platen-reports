@@ -1,6 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 using static PlatenReports.AspNetCore.Tests.ReportingTestHost;
 
@@ -151,5 +156,33 @@ public class AuthorizationTests
         auth.LastRenderKey.Should().Be("missing");
         auth.LastRequiredPermission.Should().BeNull();
         response.StatusCode.Should().Be(HttpStatusCode.NotFound, "allowing lets the engine answer");
+    }
+
+    [Fact]
+    public async Task A_host_that_forgets_the_authorizer_serves_nothing()
+    {
+        // The security property behind shipping no default. Resolution fails rather than
+        // falling back to something permissive, so forgetting to register one cannot quietly
+        // publish the reporting surface to everyone.
+        using var host = new Microsoft.Extensions.Hosting.HostBuilder()
+            .ConfigureWebHost(web =>
+            {
+                web.UseTestServer();
+                web.ConfigureServices(s =>
+                {
+                    s.AddRouting();
+                    s.AddSingleton<IReportingService>(new SpyReportingService());
+                });
+                web.Configure(app =>
+                {
+                    app.UseRouting();
+                    app.UseEndpoints(e => e.MapReportEndpoints());
+                });
+            })
+            .Start();
+
+        var act = async () => await host.GetTestClient().GetAsync("/api/v1/reports");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
     }
 }
