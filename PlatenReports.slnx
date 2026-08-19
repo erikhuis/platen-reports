@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/PlatenReports.Abstractions/PlatenReports.Abstractions.csproj" />
+    <Project Path="src/PlatenReports.AspNetCore/PlatenReports.AspNetCore.csproj" />
     <Project Path="src/PlatenReports.Core/PlatenReports.Core.csproj" />
     <Project Path="src/PlatenReports.NCalc/PlatenReports.NCalc.csproj" />
     <Project Path="src/PlatenReports.Pdf/PlatenReports.Pdf.csproj" />
@@ -8,6 +9,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PlatenReports.Abstractions.Tests/PlatenReports.Abstractions.Tests.csproj" />
+    <Project Path="tests/PlatenReports.AspNetCore.Tests/PlatenReports.AspNetCore.Tests.csproj" />
     <Project Path="tests/PlatenReports.Core.Tests/PlatenReports.Core.Tests.csproj" />
     <Project Path="tests/PlatenReports.NCalc.Tests/PlatenReports.NCalc.Tests.csproj" />
   </Folder>

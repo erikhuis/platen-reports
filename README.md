@@ -24,7 +24,7 @@ report.
 | `PlatenReports.Abstractions` | NuGet | The definition model and the ports a host implements. **No dependencies.** | shipped |
 | `PlatenReports.Core` | NuGet | The engine: parser, overlay merger, path binder, template renderer, definition sources, reporting service | shipped |
 | `PlatenReports.NCalc` | NuGet | `visibleIf` condition evaluation | shipped |
-| `PlatenReports.AspNetCore` | NuGet | Endpoint mapping, DI, and the authorization port | planned |
+| `PlatenReports.AspNetCore` | NuGet | Endpoint mapping, DI, and the authorization port | shipped |
 | `PlatenReports.Sql` | NuGet | SQL data provider | placeholder |
 | `PlatenReports.Pdf` | NuGet | PDF layout + output | placeholder |
 | `@platen-reports/model` | npm | Document model, overlay algebra and wire contracts. **No framework, no dependencies.** | shipped |
