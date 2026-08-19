@@ -1,6 +1,6 @@
 name: Publish
 
-# Publishes every package this repository ships — five to nuget.org and two to
+# Publishes every package this repository ships — six to nuget.org and two to
 # npm — from one tag, in lockstep.
 # See docs/versioning.md: equal versions are conformant, so the two registries
 # must not drift.
@@ -221,6 +221,7 @@ jobs:
           # had four and silently stayed at four while the carve added more — so a
           # missing package passed verification. Add to it when a package is added.
           for f in "PlatenReports.Abstractions.$VERSION.nupkg" \
+                   "PlatenReports.AspNetCore.$VERSION.nupkg" \
                    "PlatenReports.Core.$VERSION.nupkg" \
                    "PlatenReports.NCalc.$VERSION.nupkg" \
                    "PlatenReports.Sql.$VERSION.nupkg" \

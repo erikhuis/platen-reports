@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>PlatenReports.AspNetCore</PackageId>
+    <Description>ASP.NET Core host integration for Platen Reports: MapReportEndpoints() maps the whole reporting HTTP surface as minimal APIs, plus DI wiring and the IReportAuthorizer port a host implements to decide who may do what.</Description>
+    <RootNamespace>PlatenReports.AspNetCore</RootNamespace>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../PlatenReports.Core/PlatenReports.Core.csproj" />
+  </ItemGroup>
+
+  <!-- ==========================================================
+       FrameworkReference, not PackageReference: the ASP.NET Core
+       shared framework is already present in any host that can
+       serve these endpoints, so referencing it this way adds
+       nothing to the package's dependency closure.
+       ========================================================== -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>
