@@ -32,6 +32,11 @@ public interface IReportAuthorizer
     /// <param name="reportKey">The report being rendered.</param>
     /// <param name="requiredPermission">
     /// The permission the definition declares, or <see langword="null"/> when it declares none.
+    /// <para><b>Null also means "no such report".</b> The engine looks the permission up without
+    /// asserting the report exists, so an unknown key arrives here as <see langword="null"/> and
+    /// an implementation cannot tell the two apart. Allowing is the safe reading — the endpoint
+    /// then answers <c>404</c>. Denying instead is also defensible, and hides whether a report
+    /// exists from a caller who may not render it; choose deliberately rather than by accident.</para>
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns><see langword="true"/> to allow.</returns>

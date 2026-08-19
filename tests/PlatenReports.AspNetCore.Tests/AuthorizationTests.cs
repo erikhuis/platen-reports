@@ -135,4 +135,21 @@ public class AuthorizationTests
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         response.Headers.Location.Should().BeNull();
     }
+
+    [Fact]
+    public async Task An_unknown_report_reaches_the_authorizer_with_a_null_permission()
+    {
+        // The engine looks the permission up with ?. rather than asserting existence, so an
+        // unknown key arrives as null — indistinguishable from "declares none". Pinned because
+        // an implementation's choice between allowing (then 404) and denying (hiding existence)
+        // depends on knowing this happens at all.
+        var auth = new StubAuthorizer();
+        var client = Build(new SpyReportingService(), auth);
+
+        var response = await client.GetAsync("/api/v1/reports/missing/render");
+
+        auth.LastRenderKey.Should().Be("missing");
+        auth.LastRequiredPermission.Should().BeNull();
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound, "allowing lets the engine answer");
+    }
 }

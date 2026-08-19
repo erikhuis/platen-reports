@@ -242,7 +242,7 @@ public static class ReportEndpointRouteBuilderExtensions
     /// rarely agree on casing. Repeated keys keep the first value: a report parameter is scalar,
     /// and silently concatenating or last-wins would both be surprising.
     /// </remarks>
-    internal static Dictionary<string, string> CollectParameters(HttpRequest request)
+    private static Dictionary<string, string> CollectParameters(HttpRequest request)
     {
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (queryKey, values) in request.Query)
