@@ -1,10 +1,18 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using PlatenReports;
+using PlatenReports.NCalc;
 
-namespace PlatenReports.NCalc;
+namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>Registers the NCalc condition evaluator with a host's service collection.</summary>
-public static class ServiceCollectionExtensions
+/// <remarks>
+/// Declared in <c>Microsoft.Extensions.DependencyInjection</c> so the method surfaces in a host's
+/// <c>Program.cs</c> without a further <c>using</c> — the convention most of the .NET ecosystem
+/// follows for <c>Add*</c> extensions. The class is named for what it registers rather than
+/// <c>ServiceCollectionExtensions</c>, because that namespace is shared with every other package
+/// doing the same and a duplicate type name there is ambiguous the moment anyone refers to it.
+/// </remarks>
+public static class NCalcReportingServiceCollectionExtensions
 {
     /// <summary>
     /// Registers <see cref="NCalcReportConditionEvaluator"/> as the singleton

@@ -19,6 +19,10 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/PlatenReports.AspNetCore/PlatenReports.AspNetCore.csproj" />
+    <!-- Referenced so HostWiringConventionTests can prove the two packages' DI extensions
+         coexist in the shared Microsoft.Extensions.DependencyInjection namespace, which is
+         the realistic host setup and the reason they carry distinct class names. -->
+    <ProjectReference Include="../../src/PlatenReports.NCalc/PlatenReports.NCalc.csproj" />
   </ItemGroup>
 
 </Project>

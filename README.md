@@ -47,6 +47,9 @@ All packages in this repository share one version and are released in lockstep.
 `PlatenReports.AspNetCore` maps the whole reporting surface as minimal APIs — catalogue,
 definitions, field trees, overlay CRUD, render and preview — under a prefix you choose.
 
+The `Add*` methods are declared in `Microsoft.Extensions.DependencyInjection`, so they surface in
+`Program.cs` without importing a Platen namespace.
+
 ```csharp
 builder.Services
     .AddPlatenReports()                 // the engine
