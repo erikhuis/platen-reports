@@ -186,7 +186,7 @@ public static class ReportEndpointRouteBuilderExtensions
         });
 
         group.MapPost("/{key}/preview", async (IReportingService service, IReportAuthorizer auth,
-            string key, PreviewRequest request, CancellationToken ct) =>
+            HttpContext http, string key, PreviewRequest request, CancellationToken ct) =>
         {
             // Two gates, not one. Preview is an authoring feature, so it needs the authoring
             // right — but it renders the same live data as a real render, so it needs the render
@@ -197,7 +197,24 @@ public static class ReportEndpointRouteBuilderExtensions
                 return Forbidden();
             }
 
-            if (!await auth.CanRenderAsync(key, service.GetRequiredPermission(key), ct))
+            // The permission to check is whatever definition is actually about to render, not
+            // necessarily the published one: a draft DefinitionJson can declare a different (or
+            // stronger) requiredPermission, and RenderAsync renders the draft — not the published
+            // definition — when it is set. Checking the published permission here would authorize
+            // against a permission the draft is not actually protected by.
+            string? requiredPermission;
+            try
+            {
+                requiredPermission = request.DefinitionJson is null
+                    ? service.GetRequiredPermission(key)
+                    : ReportDefinitionParser.Parse(request.DefinitionJson).RequiredPermission;
+            }
+            catch (ReportValidationException ex)
+            {
+                return Results.BadRequest(new OverlayValidationResultDto(false, ex.Errors, []));
+            }
+
+            if (!await auth.CanRenderAsync(key, requiredPermission, ct))
             {
                 return Forbidden();
             }
@@ -212,7 +229,14 @@ public static class ReportEndpointRouteBuilderExtensions
                     request.TimeZone,
                     request.DefinitionJson,
                     ct);
-                return Results.File(result.Content, result.ContentType, result.FileName);
+
+                // Inline, not attachment — same reasoning as /render above: the File(...,
+                // fileName) overload sets Content-Disposition: attachment, which turns a preview
+                // tab into a forced download and leaves the tab blank.
+                var disposition = new ContentDispositionHeaderValue("inline");
+                disposition.SetHttpFileName(result.FileName);
+                http.Response.Headers[HeaderNames.ContentDisposition] = disposition.ToString();
+                return Results.File(result.Content, result.ContentType);
             }
             catch (KeyNotFoundException ex)
             {

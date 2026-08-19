@@ -124,6 +124,27 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public async Task The_allow_all_warning_does_not_fire_when_a_host_registration_wins()
+    {
+        // Regression: the warning used to fire unconditionally just because
+        // AddAllowAllReportAuthorizer() was called, even when TryAddSingleton left a host's own
+        // authorizer in place (see the test above) — a false alarm that would train an operator
+        // to ignore the one warning that actually matters.
+        var recorder = new RecordingLoggerProvider();
+        var services = WithHostPorts();
+        services.AddLogging(b => b.AddProvider(recorder));
+        services.AddSingleton<IReportAuthorizer, DenyingAuthorizer>();
+        var provider = services.AddPlatenReports().AddAllowAllReportAuthorizer().BuildServiceProvider();
+
+        foreach (var hosted in provider.GetServices<IHostedService>())
+        {
+            await hosted.StartAsync(CancellationToken.None);
+        }
+
+        recorder.Warnings.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Both_extensions_reject_a_null_collection()
     {
         var add = () => ((IServiceCollection)null!).AddPlatenReports();

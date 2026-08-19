@@ -129,6 +129,51 @@ public class AuthorizationTests
     }
 
     [Fact]
+    public async Task Preview_checks_render_rights_against_the_published_permission_when_there_is_no_draft_definition()
+    {
+        var service = new SpyReportingService { RequiredPermission = "WorkOrders.View" };
+        var auth = new StubAuthorizer();
+        var client = Build(service, auth);
+
+        await client.PostAsJsonAsync("/api/v1/reports/wo/preview", new PreviewRequest(null, null, "en"));
+
+        auth.LastRequiredPermission.Should().Be("WorkOrders.View");
+    }
+
+    [Fact]
+    public async Task Preview_checks_render_rights_against_a_draft_definition_s_own_permission_not_the_published_one()
+    {
+        // Regression: preview used to authorize against service.GetRequiredPermission(key) — the
+        // *published* definition's permission — even when the request carried a draft
+        // DefinitionJson declaring a different one. RenderAsync renders the draft in that case,
+        // so authorizing against the published permission checks the wrong thing entirely.
+        var service = new SpyReportingService { RequiredPermission = "WorkOrders.View" };
+        var auth = new StubAuthorizer();
+        var client = Build(service, auth);
+        const string draft =
+            """{"schemaVersion":1,"key":"wo","version":"1.0.0","dataSource":"src","requiredPermission":"WorkOrders.Sensitive"}""";
+
+        await client.PostAsJsonAsync("/api/v1/reports/wo/preview", new PreviewRequest(null, null, "en", DefinitionJson: draft));
+
+        auth.LastRequiredPermission.Should().Be("WorkOrders.Sensitive", "the draft's own permission, not the published one");
+    }
+
+    [Fact]
+    public async Task Preview_rejects_an_unparsable_draft_definition_with_400_before_ever_asking_to_render()
+    {
+        var service = new SpyReportingService();
+        var auth = new StubAuthorizer();
+        var client = Build(service, auth);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/reports/wo/preview", new PreviewRequest(null, null, "en", DefinitionJson: "{ not json"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        auth.Asked.Should().NotContain(nameof(IReportAuthorizer.CanRenderAsync));
+        service.Calls.Should().NotContain(nameof(SpyReportingService.RenderAsync));
+    }
+
+    [Fact]
     public async Task A_refusal_is_403_and_never_a_redirect()
     {
         // Results.Forbid() would delegate to an authentication scheme this package cannot assume

@@ -114,6 +114,22 @@ public class EndpointBehaviourTests
     }
 
     [Fact]
+    public async Task Preview_serves_the_pdf_inline_with_an_encoded_filename()
+    {
+        // Regression: preview used Results.File(content, contentType, fileName), which sets
+        // Content-Disposition: attachment — the exact bug /render works around above, reintroduced
+        // one handler later. A preview tab must render inline, the same as a real render.
+        var response = await Build(new SpyReportingService(), new StubAuthorizer())
+            .PostAsJsonAsync("/api/v1/reports/wo/preview", new PreviewRequest(null, null, null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var disposition = response.Content.Headers.ContentDisposition!;
+        disposition.DispositionType.Should().Be("inline");
+        disposition.FileNameStar.Should().Contain("nïcode", "non-ASCII goes in filename*");
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/pdf");
+    }
+
+    [Fact]
     public async Task Preview_defaults_the_locale_when_the_body_omits_it()
     {
         var service = new SpyReportingService();

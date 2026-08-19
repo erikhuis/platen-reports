@@ -33,15 +33,23 @@ public sealed class AllowAllReportAuthorizer : IReportAuthorizer
 /// starts rather than whenever something first happens to resolve the authorizer. A warning that
 /// only surfaces on the first request is one nobody reads until it is already too late.
 /// </remarks>
-internal sealed class AllowAllReportAuthorizerWarning(ILogger<AllowAllReportAuthorizer> logger) : IHostedService
+internal sealed class AllowAllReportAuthorizerWarning(
+    IReportAuthorizer authorizer, ILogger<AllowAllReportAuthorizer> logger) : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        logger.LogWarning(
-            "Platen Reports is using AllowAllReportAuthorizer: every reporting endpoint is open to " +
-            "every caller, including report rendering. This is intended for samples, local " +
-            "development and tests. Register your own IReportAuthorizer before exposing these " +
-            "endpoints to anyone.");
+        // AddAllowAllReportAuthorizer registers with TryAddSingleton, so it is a no-op when a
+        // host already registered its own IReportAuthorizer first — check what actually won
+        // resolution, or this cries wolf over a host that is in fact using its own authorizer.
+        if (authorizer is AllowAllReportAuthorizer)
+        {
+            logger.LogWarning(
+                "Platen Reports is using AllowAllReportAuthorizer: every reporting endpoint is open to " +
+                "every caller, including report rendering. This is intended for samples, local " +
+                "development and tests. Register your own IReportAuthorizer before exposing these " +
+                "endpoints to anyone.");
+        }
+
         return Task.CompletedTask;
     }
 
