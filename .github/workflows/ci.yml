@@ -72,13 +72,19 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm -r --filter './packages/**' typecheck
-
-      # Build before test: the packaging guard asserts against dist/, so a stale or missing
-      # bundle would make it vacuous rather than failing.
+      # Build first, and not for tidiness. @platen-reports/designer typechecks against
+      # @platen-reports/model's emitted declarations, so with no dist/ present every model
+      # import resolves to nothing — measured at 148 phantom "implicitly has an 'any' type"
+      # errors that point nowhere near the cause. The designer is the first package here with a
+      # workspace dependency, which is why this order held up until now.
+      #
+      # It also has to precede Test: the packaging guard asserts against dist/, and a missing
+      # bundle would make it skip rather than fail.
       - name: Build
         run: pnpm -r --filter './packages/**' build
+
+      - name: Typecheck
+        run: pnpm -r --filter './packages/**' typecheck
 
       - name: Test
         run: pnpm -r --filter './packages/**' test

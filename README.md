@@ -28,7 +28,7 @@ report.
 | `PlatenReports.Sql` | NuGet | SQL data provider | placeholder |
 | `PlatenReports.Pdf` | NuGet | PDF layout + output | placeholder |
 | `@platen-reports/model` | npm | Document model, overlay algebra and wire contracts. **No framework, no dependencies.** | shipped |
-| `@platen-reports/designer` | npm | React report designer | placeholder |
+| `@platen-reports/designer` | npm | React report designer | shipped |
 
 Packages marked *placeholder* reserve the name and publish a stub; they do not do
 anything yet. The engine is being extracted in phases and this table tracks it.
@@ -73,6 +73,30 @@ app.MapReportEndpoints("/reports")
    .RequireAuthorization()
    .RequireRateLimiting("reports");
 ```
+
+### Mounting the designer
+
+`@platen-reports/designer` is React and ships `'use client'`, so it drops into a Next.js app
+directly. Everything host-specific arrives through one provider:
+
+```tsx
+<ReportDesignerProvider
+  t={translate}                 // any scoped translator; DESIGNER_MESSAGES ships the wording
+  locale={locale}
+  canEdit={mayManageDefinitions}
+  api={reportsApiClient}        // your binding of ReportsApiClient
+  definitionDirectory="reports/definitions"   // optional: shown in the export dialog
+  onBack={() => router.back()}
+>
+  <DesignerShell reportKey={key} data={loaded} onSaved={reload} />
+</ReportDesignerProvider>
+```
+
+React, MUI and emotion are peer dependencies — the designer never brings its own copy. It renders
+against an unmodified `createTheme()` and ships no stylesheet.
+
+With no i18n library of your own, `createDesignerTranslate(locale)` returns a translator over the
+bundle for that locale.
 
 ### Authorization is yours
 

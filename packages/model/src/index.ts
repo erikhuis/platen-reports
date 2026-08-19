@@ -46,6 +46,7 @@ export {
   resolveLocalized,
   countChangedProps,
   childElements,
+  walkNode,
   walkElements,
   findSelection,
   findJsonObjectRange,

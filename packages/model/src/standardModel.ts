@@ -241,14 +241,19 @@ export function validateDefinition(doc: ReportDefinitionDoc): OverlayProblem[] {
  */
 export function serializeDefinition(doc: ReportDefinitionDoc): string {
   const stripped = clone(doc) as unknown as AnyNode;
-  // ELEMENT_DEFAULTS is typed as an open Record, so indexing it widens to `| undefined`
-  // even for a key that is always present.
-  const styleDefaults = ELEMENT_DEFAULTS.style!;
+  // ELEMENT_DEFAULTS carries literal keys (see designerModel.ts), so `.style` is never
+  // `undefined` here and needs no non-null assertion.
+  const styleDefaults = ELEMENT_DEFAULTS.style;
   // `defaultsKey` lets callers pass the ELEMENT_DEFAULTS key explicitly for nodes with no
   // `type` discriminant of their own (table columns, keyValueGrid pairs) — indexing by
   // `node.type` for those is always `undefined`, silently skipping their default-elision.
   const stripNode = (node: AnyNode, defaultsKey?: string) => {
-    const typeDefaults = ELEMENT_DEFAULTS[defaultsKey ?? node.type ?? ''];
+    // ELEMENT_DEFAULTS carries literal keys so consumers can reach them safely under
+    // noUncheckedIndexedAccess; this is the one place that indexes it dynamically, and the cast
+    // is where that narrowness gets paid for.
+    const typeDefaults = ELEMENT_DEFAULTS[
+      (defaultsKey ?? node.type ?? '') as keyof typeof ELEMENT_DEFAULTS
+    ] as Record<string, unknown> | undefined;
     if (typeDefaults) {
       for (const [k, v] of Object.entries(typeDefaults)) {
         if (node[k] !== undefined && node[k] === v) delete node[k];
@@ -263,8 +268,10 @@ export function serializeDefinition(doc: ReportDefinitionDoc): string {
     }
     for (const child of node.children ?? []) stripNode(child);
     // keyValueGrid.columns is a NUMBER (column count), not a table's column array —
-    // only descend when it is genuinely an array of column elements.
-    if (Array.isArray(node.columns)) for (const col of node.columns) stripNode(col);
+    // only descend when it is genuinely an array of column elements. Table columns have no
+    // `type` discriminant either, so — like grid pairs — they need an explicit defaultsKey or
+    // default-elision silently never runs for them.
+    if (Array.isArray(node.columns)) for (const col of node.columns) stripNode(col, 'tableColumn');
     for (const pair of node.pairs ?? []) stripNode(pair, 'pair');
   };
   const d = stripped as { pageHeader?: AnyNode; body?: AnyNode[]; pageFooter?: AnyNode };

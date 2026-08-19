@@ -55,7 +55,7 @@ describe('designerModel', () => {
 
   it('countChangedProps counts only present-and-different values', () => {
     const style = { fontSize: 14, bold: false, align: undefined };
-    expect(countChangedProps(style, ELEMENT_DEFAULTS.style!, ['fontSize', 'bold', 'align'])).toBe(1);
+    expect(countChangedProps(style, ELEMENT_DEFAULTS.style, ['fontSize', 'bold', 'align'])).toBe(1);
   });
 
   it('findJsonObjectRange brace-matches the object owning the id', () => {

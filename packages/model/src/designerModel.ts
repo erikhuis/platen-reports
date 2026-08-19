@@ -197,7 +197,11 @@ export function resolveLocalized(value: LocalizedTextValue | undefined, lang: st
  * omitted from the JSON and displayed un-highlighted; the inspector's Advanced badges
  * count properties that differ.
  */
-export const ELEMENT_DEFAULTS: Record<string, Record<string, unknown>> = {
+// Deliberately un-annotated: the inferred literal-key type is what makes
+// `ELEMENT_DEFAULTS.text` safe for consumers under `noUncheckedIndexedAccess`. Annotating it
+// as an open Record widens every access to `| undefined` and pushes a non-null assertion into
+// every call site in the designer.
+export const ELEMENT_DEFAULTS = {
   style: {
     fontSize: 9, bold: false, italic: false, align: 'left', color: '', backgroundColor: '',
     paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
@@ -216,6 +220,10 @@ export const ELEMENT_DEFAULTS: Record<string, Record<string, unknown>> = {
   line: { thickness: 0.5 },
   table: { repeatHeader: true },
   pair: { format: '' },
+  // Table columns have no `type` discriminant of their own (see standardModel.ts's stripNode),
+  // so they need their own defaultsKey — `column` is already taken by the row/column layout
+  // element's spacing default.
+  tableColumn: { format: '' },
   // margin: the server parser is the source of truth — ReportDefinitionParser.cs `?? 24`.
   page: { size: 'A4', orientation: 'portrait', margin: 24 },
 };
@@ -241,15 +249,17 @@ export function childElements(node: ReportElementNode): ReportElementNode[] {
   }
 }
 
+/** Depth-first walk over a single element subtree (pre-order: the node itself, then its descendants). */
+export function* walkNode(node: ReportElementNode): Generator<ReportElementNode> {
+  yield node;
+  for (const child of childElements(node)) yield* walkNode(child);
+}
+
 /** Depth-first walk over every element in the document (header → body → footer). */
 export function* walkElements(doc: ReportDefinitionDoc): Generator<ReportElementNode> {
-  function* walk(node: ReportElementNode): Generator<ReportElementNode> {
-    yield node;
-    for (const child of childElements(node)) yield* walk(child);
-  }
-  if (doc.pageHeader) yield* walk(doc.pageHeader);
-  for (const node of doc.body ?? []) yield* walk(node);
-  if (doc.pageFooter) yield* walk(doc.pageFooter);
+  if (doc.pageHeader) yield* walkNode(doc.pageHeader);
+  for (const node of doc.body ?? []) yield* walkNode(node);
+  if (doc.pageFooter) yield* walkNode(doc.pageFooter);
 }
 
 export interface FoundSelection {
