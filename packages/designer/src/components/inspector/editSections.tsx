@@ -26,6 +26,7 @@ import {
 import { collectAllIds, nextId, type ReportOverlayDoc } from '@platen-reports/model';
 import type { DesignerEditing, InsertTarget } from '@platen-reports/model';
 import { MONO_FONT as MONO } from '../designerConstants';
+import LangText from '../../LangText';
 import {
   AddItemButton, AdvSection, EditColorInput, EditFieldRow, EditNumberInput, EditPathInput, EditSeg,
   EditTextInput, EditToggle, LockedControl, MUTE, NoteText, STYLE_KEYS, asRecord,
@@ -164,14 +165,10 @@ export function EditValueSource({ node, id, lang, editing, pathOptions }: {
   const canEdit = canEditStructureOf(editing, id);
   const isTemplate = node.template != null;
   if (isTemplate) {
-    // Template text is allowlisted → editable even on standard elements.
-    return (
-      <EditTextInput
-        mono
-        value={typeof node.template === 'string' ? node.template : resolveLocalized(node.template, lang)}
-        onChange={(v) => editing.setProp(id, 'template', v, undefined)}
-      />
-    );
+    // Template text is allowlisted → editable even on standard elements. `template` is a
+    // LocalizedTextValue (string | Record<locale, string>) — route it through LangText so a
+    // multi-locale map round-trips instead of being collapsed to the displayed locale's string.
+    return <LangText value={node.template} lang={lang} onChange={(v) => editing.setProp(id, 'template', v, undefined)} />;
   }
   const pathControl = (
     <EditPathInput value={node.path ?? ''} options={pathOptions} onChange={(v) => editing.setProp(id, 'path', v, undefined)} />

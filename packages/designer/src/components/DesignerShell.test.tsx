@@ -154,6 +154,37 @@ describe('DesignerShell host contract', () => {
     await waitFor(() => expect(mockDeleteOverlay).toHaveBeenCalledWith('asset-print'));
   });
 
+  // Regression: handleRevert read overlayState.saveError from the render that created its
+  // useCallback closure — stale, since useOverlayEditing's setSaveError call lands in a LATER
+  // render. The toast used to show the generic fallback (or a PREVIOUS attempt's error) instead
+  // of the error the just-awaited revert() call actually produced.
+  it('shows the actual revert error, not the generic fallback, when the revert fails', async () => {
+    mockDeleteOverlay.mockRejectedValueOnce(new Error('locked by another editor'));
+    renderShell({ canEdit: true });
+
+    fireEvent.click(screen.getByTestId('designer-revert'));
+    fireEvent.click(await screen.findByTestId('designer-confirm-accept'));
+
+    expect(await screen.findByText('Error: locked by another editor')).toBeInTheDocument();
+    expect(screen.queryByText('designerSaveFailed')).not.toBeInTheDocument();
+  });
+
+  it('shows each failed revert\'s own error, never a previous attempt\'s', async () => {
+    mockDeleteOverlay.mockRejectedValueOnce(new Error('first failure'));
+    renderShell({ canEdit: true });
+
+    fireEvent.click(screen.getByTestId('designer-revert'));
+    fireEvent.click(await screen.findByTestId('designer-confirm-accept'));
+    expect(await screen.findByText('Error: first failure')).toBeInTheDocument();
+
+    mockDeleteOverlay.mockRejectedValueOnce(new Error('second failure'));
+    fireEvent.click(screen.getByTestId('designer-revert'));
+    fireEvent.click(await screen.findByTestId('designer-confirm-accept'));
+
+    expect(await screen.findByText('Error: second failure')).toBeInTheDocument();
+    expect(screen.queryByText('Error: first failure')).not.toBeInTheDocument();
+  });
+
   it('uses a host-supplied confirm instead of the built-in dialog', async () => {
     const confirm = vi.fn<(o: DesignerConfirmOptions) => Promise<boolean>>().mockResolvedValue(false);
     renderShell({ canEdit: true, confirm });

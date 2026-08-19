@@ -88,10 +88,28 @@ export interface DesignerJsonPanelProps {
 
 export default function DesignerJsonPanel({ standardJson, effectiveJson, selectedId, overlayJson }: DesignerJsonPanelProps) {
   const t = useDesignerT();
+  const hasOverlayTab = overlayJson !== undefined;
   // In tenant mode the Overlay patch is the thing being edited, so it leads; otherwise
   // the canvas/outline render the effective document, so it is the default view.
-  const [tab, setTab] = useState<JsonTab>(overlayJson !== undefined ? 'overlay' : 'effective');
+  const [tab, setTab] = useState<JsonTab>(hasOverlayTab ? 'overlay' : 'effective');
   const [copied, setCopied] = useState(false);
+
+  // Resync when the Overlay tab appears or disappears — the shell keeps this component mounted
+  // across a tenant/standard authoring toggle (same position in the tree), so without this
+  // `tab` could keep pointing at 'overlay' after the tab itself stops rendering: the JSON pane
+  // goes blank (activeJson falls to '' since overlayJson is now undefined) and MUI's Tabs gets a
+  // `value` matching no child Tab.
+  //
+  // Adjusted during render (React's documented pattern for "reset state when a prop changes"),
+  // not in a useEffect: an effect would let one frame commit with the stale, now-invalid `tab`
+  // first — exactly the blank-panel/console-warning symptom this fix exists to prevent — before
+  // firing after paint to correct it. Tracking the previous availability alongside `tab` is what
+  // makes this a one-time reaction to the prop transition rather than an infinite render loop.
+  const [prevHasOverlayTab, setPrevHasOverlayTab] = useState(hasOverlayTab);
+  if (hasOverlayTab !== prevHasOverlayTab) {
+    setPrevHasOverlayTab(hasOverlayTab);
+    setTab(hasOverlayTab ? 'overlay' : 'effective');
+  }
 
   const activeJson = tab === 'overlay' ? (overlayJson ?? '') : tab === 'standard' ? standardJson : effectiveJson;
   const range = useMemo(() => findJsonObjectRange(activeJson, selectedId), [activeJson, selectedId]);

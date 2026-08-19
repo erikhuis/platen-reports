@@ -9,8 +9,8 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { ReportDefinitionDoc, ReportElementNode } from '@platen-reports/model';
-import { childElements } from '@platen-reports/model';
+import type { ReportDefinitionDoc } from '@platen-reports/model';
+import { walkNode } from '@platen-reports/model';
 import {
   collectAllIds, insertElement, mergePreview, resetElementProp,
   restoreElement, serializeOverlay, setElementProp, suppressElement, validateInserted,
@@ -57,8 +57,10 @@ export interface OverlayEditingState {
   baseVersionOutdated: boolean;
   saving: boolean;
   saveError: string | null;
-  save: () => Promise<boolean>;
-  revert: () => Promise<boolean>;
+  /** Resolves the error message that just occurred, or `null` on success. */
+  save: () => Promise<string | null>;
+  /** Resolves the error message that just occurred, or `null` on success. */
+  revert: () => Promise<string | null>;
 }
 
 /** Load the stored overlay for a report; null when none exists. */
@@ -107,8 +109,8 @@ export function useOverlayEditing({
     const doc = stateRef.current.preview.displayDoc;
     // Which section owns the selected element (drives the pageNumber palette lock).
     const section = ((): 'header' | 'body' | 'footer' => {
-      if (doc.pageHeader && [...walkOne(doc.pageHeader)].some((n) => n.id === selectedId)) return 'header';
-      if (doc.pageFooter && [...walkOne(doc.pageFooter)].some((n) => n.id === selectedId)) return 'footer';
+      if (doc.pageHeader && [...walkNode(doc.pageHeader)].some((n) => n.id === selectedId)) return 'header';
+      if (doc.pageFooter && [...walkNode(doc.pageFooter)].some((n) => n.id === selectedId)) return 'footer';
       return 'body';
     })();
     // Anchor after the selected element if it is a body top-level element; otherwise
@@ -151,7 +153,13 @@ export function useOverlayEditing({
   const dirty = overlayJson !== savedOverlayJson;
   const baseVersionOutdated = preview.warnings.some((w) => w.code === 'BaseVersionOutdated');
 
-  const save = useCallback(async (): Promise<boolean> => {
+  // save/revert resolve the error message DIRECTLY, rather than making the caller read it back
+  // off `saveError` after the await. A caller that closed over this hook's return value before
+  // calling save()/revert() holds a stale object — `setSaveError` inside here lands in a LATER
+  // render, not in that already-captured closure — so reading `saveError` post-await risks
+  // showing null, or worse, a PREVIOUS attempt's error. Resolving the value from inside the same
+  // async function has no such gap: it is plain local state, not tied to a render at all.
+  const save = useCallback(async (): Promise<string | null> => {
     setSaving(true);
     setSaveError(null);
     try {
@@ -159,8 +167,9 @@ export function useOverlayEditing({
       // Dry-run validate first (surfaces fatal errors before persisting), then PUT.
       const validation = await api.validateOverlay(reportKey, body);
       if (!validation.valid) {
-        setSaveError(validation.errors.join(' '));
-        return false;
+        const message = validation.errors.join(' ');
+        setSaveError(message);
+        return message;
       }
       // The validate merge is authoritative — surface its warnings alongside the client set.
       setServerWarnings((validation.warnings ?? []).map(toClientWarning));
@@ -173,16 +182,17 @@ export function useOverlayEditing({
       setSavedOverlayJson(serializeOverlay(next));
       if (reloaded) setIsEnabled(reloaded.isEnabled);
       await onSaved?.();
-      return true;
+      return null;
     } catch (e) {
-      setSaveError(onError(e));
-      return false;
+      const message = onError(e);
+      setSaveError(message);
+      return message;
     } finally {
       setSaving(false);
     }
   }, [api, overlay, isEnabled, reportKey, onError, onSaved]);
 
-  const revert = useCallback(async (): Promise<boolean> => {
+  const revert = useCallback(async (): Promise<string | null> => {
     setSaving(true);
     setSaveError(null);
     try {
@@ -193,10 +203,11 @@ export function useOverlayEditing({
       setIsEnabled(false);
       setServerWarnings([]);
       await onSaved?.();
-      return true;
+      return null;
     } catch (e) {
-      setSaveError(onError(e));
-      return false;
+      const message = onError(e);
+      setSaveError(message);
+      return message;
     } finally {
       setSaving(false);
     }
@@ -220,8 +231,3 @@ export function useOverlayEditing({
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set();
-
-function* walkOne(node: ReportElementNode): Generator<ReportElementNode> {
-  yield node;
-  for (const child of childElements(node)) yield* walkOne(child);
-}

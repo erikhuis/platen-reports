@@ -9,7 +9,7 @@
  * gate once the file lands. Export stays disabled while client-side validation reports problems.
  */
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography,
 } from '@mui/material';
@@ -32,6 +32,14 @@ export default function ExportDialog({ open, onClose, fileName, json, problemCou
   const [copied, setCopied] = useState(false);
   const copiedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasProblems = problemCount > 0;
+
+  // DesignerShell only renders this dialog while standardMode is true (unmounting it on an
+  // authoring-mode toggle), and MUI keeps a Dialog mounted through its own close transition —
+  // either can unmount this component with the reset timer still pending. Without this, the
+  // stale setCopied(false) fires against an unmounted component. Mirrors DesignerJsonPanel.tsx.
+  useEffect(() => () => {
+    if (copiedResetRef.current) clearTimeout(copiedResetRef.current);
+  }, []);
 
   const handleDownload = () => {
     const blob = new Blob([json], { type: 'application/json' });

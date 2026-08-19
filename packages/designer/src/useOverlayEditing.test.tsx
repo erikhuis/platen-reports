@@ -64,9 +64,9 @@ describe('useOverlayEditing', () => {
     const { result } = render({ schemaVersion: 1, reportKey: 'r', baseVersion: '1.0.0', suppress: ['detail-text'] });
     expect(result.current.baseVersionOutdated).toBe(true);
 
-    let ok: boolean | undefined;
-    await act(async () => { ok = await result.current.save(); });
-    expect(ok).toBe(true);
+    let error: string | null | undefined;
+    await act(async () => { error = await result.current.save(); });
+    expect(error).toBeNull();
     expect(mockValidate).toHaveBeenCalledTimes(1);
     expect(mockPut).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(result.current.baseVersionOutdated).toBe(false));
@@ -97,9 +97,9 @@ describe('useOverlayEditing', () => {
     mockValidate.mockResolvedValue({ valid: false, errors: ['boom'], warnings: [] });
     const { result } = render();
     act(() => result.current.editing.setProp('detail-text', 'text', 'x', undefined));
-    let ok: boolean | undefined;
-    await act(async () => { ok = await result.current.save(); });
-    expect(ok).toBe(false);
+    let error: string | null | undefined;
+    await act(async () => { error = await result.current.save(); });
+    expect(error).toBe('boom');
     expect(result.current.saveError).toBe('boom');
     expect(mockPut).not.toHaveBeenCalled();
   });
@@ -107,10 +107,28 @@ describe('useOverlayEditing', () => {
   it('revert deletes the overlay and clears state', async () => {
     mockDelete.mockResolvedValue(undefined);
     const { result } = render({ schemaVersion: 1, reportKey: 'r', suppress: ['detail-text'] });
-    let ok: boolean | undefined;
-    await act(async () => { ok = await result.current.revert(); });
-    expect(ok).toBe(true);
+    let error: string | null | undefined;
+    await act(async () => { error = await result.current.revert(); });
+    expect(error).toBeNull();
     expect(mockDelete).toHaveBeenCalledWith('r');
     expect(JSON.parse(result.current.overlayJson).suppress).toEqual([]);
+  });
+
+  // Regression: save()/revert() used to resolve a plain boolean, forcing callers to read the
+  // error back off `saveError` after the await — a stale closure trap (see DesignerShell.tsx's
+  // handleSave/handleRevert). Resolving the error directly removes the trap structurally: two
+  // consecutive failed saves with DIFFERENT errors must each report their OWN error, never the
+  // previous attempt's.
+  it('save resolves each attempt\'s own error, never a previous attempt\'s', async () => {
+    mockValidate.mockResolvedValueOnce({ valid: false, errors: ['first failure'], warnings: [] });
+    const { result } = render();
+
+    let error: string | null | undefined;
+    await act(async () => { error = await result.current.save(); });
+    expect(error).toBe('first failure');
+
+    mockValidate.mockResolvedValueOnce({ valid: false, errors: ['second failure'], warnings: [] });
+    await act(async () => { error = await result.current.save(); });
+    expect(error).toBe('second failure');
   });
 });

@@ -152,6 +152,62 @@ describe('DesignerJsonPanel', () => {
     expect(copyButton.querySelector('.lucide-check')).toBeNull();
   });
 
+  it('leads with the Overlay tab when overlayJson is supplied', () => {
+    const overlayJson = JSON.stringify({ schemaVersion: 1, reportKey: 'asset-print' }, null, 2);
+    render(
+      <DesignerJsonPanel
+        standardJson={standardJson} effectiveJson={effectiveJson}
+        selectedId={REPORT_SETTINGS_ID} overlayJson={overlayJson}
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Overlay', selected: true })).toBeInTheDocument();
+    expect(content().textContent).toContain('reportKey');
+  });
+
+  // Regression: `tab` was seeded from `overlayJson !== undefined` only once, on mount. The shell
+  // keeps this component mounted across a tenant/standard authoring toggle (same JSX position in
+  // the tree), so `overlayJson` can flip to/from undefined without a remount — and `tab` used to
+  // keep pointing at 'overlay' after that tab stopped rendering: the panel went blank (activeJson
+  // fell back to '') and MUI's Tabs got a `value` matching no child Tab.
+  it('resyncs off the Overlay tab when overlayJson disappears without a remount', () => {
+    const overlayJson = JSON.stringify({ schemaVersion: 1, reportKey: 'asset-print' }, null, 2);
+    const { rerender } = render(
+      <DesignerJsonPanel
+        standardJson={standardJson} effectiveJson={effectiveJson}
+        selectedId={REPORT_SETTINGS_ID} overlayJson={overlayJson}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: 'Overlay' })).toBeInTheDocument();
+
+    // Same component instance, only the prop changes — mirrors DesignerShell toggling
+    // authoring mode from tenant to standard.
+    rerender(
+      <DesignerJsonPanel standardJson={standardJson} effectiveJson={effectiveJson} selectedId={REPORT_SETTINGS_ID} />,
+    );
+
+    expect(screen.queryByRole('tab', { name: 'Overlay' })).not.toBeInTheDocument();
+    expect(content().textContent).toContain('asset.effectivePath');
+    expect(content().textContent).not.toBe('');
+  });
+
+  it('re-leads with the Overlay tab when overlayJson reappears without a remount', () => {
+    const overlayJson = JSON.stringify({ schemaVersion: 1, reportKey: 'asset-print' }, null, 2);
+    const { rerender } = render(
+      <DesignerJsonPanel standardJson={standardJson} effectiveJson={effectiveJson} selectedId={REPORT_SETTINGS_ID} />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Standard' }));
+
+    rerender(
+      <DesignerJsonPanel
+        standardJson={standardJson} effectiveJson={effectiveJson}
+        selectedId={REPORT_SETTINGS_ID} overlayJson={overlayJson}
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Overlay', selected: true })).toBeInTheDocument();
+  });
+
   it('does nothing (and does not crash) when the clipboard API is unavailable', async () => {
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
     renderPanel();

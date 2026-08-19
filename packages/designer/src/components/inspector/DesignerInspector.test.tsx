@@ -1,5 +1,5 @@
 import React from 'react';
-import { render as rtlRender, screen } from '@testing-library/react';
+import { render as rtlRender, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it , vi} from 'vitest';
 import DesignerInspector from './DesignerInspector';
@@ -443,7 +443,9 @@ describe('DesignerInspector (standard authoring mode)', () => {
     await user.click(screen.getByRole('button', { name: /identity/i }));
     const version = screen.getByDisplayValue('3.0.0');
     await user.type(version, 'X');
-    expect(setVersion).toHaveBeenCalledWith('3.0.0X');
+    // EditTextInput debounces its commit (see primitives.tsx) so the canvas/JSON panel don't
+    // redo their full-document work on every keystroke — the call lands shortly after typing.
+    await waitFor(() => expect(setVersion).toHaveBeenCalledWith('3.0.0X'));
   });
 
   it('renders editable Report settings (no lock) when settings are provided', () => {

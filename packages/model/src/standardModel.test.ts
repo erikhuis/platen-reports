@@ -153,4 +153,19 @@ describe('standardModel', () => {
     const json = JSON.parse(serializeDefinition(withGrid()));
     expect(json.body[0].pairs[0].format).toBeUndefined();
   });
+
+  // Regression: table columns have no `type` discriminant either (same shape as grid pairs),
+  // so keying ELEMENT_DEFAULTS off `node.type` never matched column.format's default ('') — it
+  // was silently never stripped even though the analogous pair.format bug (above) was fixed.
+  it('serializeDefinition elides a table column format equal to its default', () => {
+    const withTable = (): ReportDefinitionDoc => ({
+      schemaVersion: 1, key: 'r', version: '1.0.0', title: 'R', dataSource: 'src',
+      body: [{
+        id: 'tbl', type: 'table', bind: 'rows',
+        columns: [{ id: 'c1', header: 'C1', path: 'x', format: '' }],
+      }],
+    });
+    const json = JSON.parse(serializeDefinition(withTable()));
+    expect(json.body[0].columns[0].format).toBeUndefined();
+  });
 });

@@ -12,7 +12,7 @@
  * Internal to `inspector/` — the folder's entry point is `DesignerInspector.tsx`.
  */
 
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   Box, ButtonBase, Collapse, IconButton, Switch, TextField,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography,
@@ -313,6 +313,15 @@ export function LockedControl({ note, children }: { note?: string; children: Rea
   );
 }
 
+/**
+ * Every keystroke here otherwise flows straight into `setProp`, which re-merges and
+ * re-serializes the whole document (and cascades into the unmemoized canvas/JSON panel) —
+ * on a large report, fast typing visibly lags. So this commits locally on every keystroke
+ * (the field stays instantly responsive) but only calls `onChange` after a short pause, and
+ * immediately on blur so a click-away never drops the tail of an edit.
+ */
+const TEXT_COMMIT_DEBOUNCE_MS = 300;
+
 export function EditTextInput({ value, onChange, mono = false, placeholder, multiline = false }: {
   value: string;
   onChange: (value: string) => void;
@@ -320,15 +329,45 @@ export function EditTextInput({ value, onChange, mono = false, placeholder, mult
   placeholder?: string;
   multiline?: boolean;
 }) {
+  const [local, setLocal] = useState(value ?? '');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Resync whenever the bound value changes for a reason other than our own pending commit —
+  // a reset/undo, or (this instance isn't remounted across same-type siblings) the selection
+  // moving to a different element/column/pair while a debounce was in flight. A still-pending
+  // timer keeps the `onChange` closure it captured at keystroke time, so it lands on whichever
+  // field the user was actually typing in, unaffected by this resync.
+  useEffect(() => {
+    setLocal(value ?? '');
+  }, [value]);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  const flush = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+      if (local !== value) onChange(local);
+    }
+  };
+
   return (
     <TextField
       size="small"
       fullWidth
-      value={value ?? ''}
+      value={local}
       placeholder={placeholder}
       multiline={multiline}
       minRows={multiline ? 3 : undefined}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        const next = e.target.value;
+        setLocal(next);
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => { timerRef.current = null; onChange(next); }, TEXT_COMMIT_DEBOUNCE_MS);
+      }}
+      onBlur={flush}
       inputProps={mono ? { style: { fontFamily: MONO, fontSize: 12 } } : undefined}
     />
   );

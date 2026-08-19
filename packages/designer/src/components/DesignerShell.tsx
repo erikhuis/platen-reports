@@ -181,8 +181,10 @@ export default function DesignerShell({ reportKey, data, onSaved }: DesignerShel
   );
 
   const handleSave = useCallback(async () => {
-    const ok = await overlayState.save();
-    setSaveToast(ok ? t('saved') : (overlayState.saveError ?? t('designerSaveFailed')));
+    // save() resolves the error itself — do not read overlayState.saveError here, it is the
+    // pre-call render's stale snapshot (see useOverlayEditing.ts's save/revert doc comment).
+    const error = await overlayState.save();
+    setSaveToast(error === null ? t('saved') : (error || t('designerSaveFailed')));
   }, [overlayState, t]);
 
   const handleRevert = useCallback(async () => {
@@ -192,8 +194,8 @@ export default function DesignerShell({ reportKey, data, onSaved }: DesignerShel
       confirmLabel: t('revertToStandard'),
     });
     if (!confirmed) return;
-    const ok = await overlayState.revert();
-    setSaveToast(ok ? t('overlayDeleted') : (overlayState.saveError ?? t('designerSaveFailed')));
+    const error = await overlayState.revert();
+    setSaveToast(error === null ? t('overlayDeleted') : (error || t('designerSaveFailed')));
   }, [confirm, overlayState, t]);
 
   const jsonPanel = jsonDock !== 'hidden' && (

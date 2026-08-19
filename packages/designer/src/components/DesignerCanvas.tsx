@@ -11,7 +11,7 @@
  * Tokens per `docs/design_handoff_report_designer/README.md`.
  */
 
-import type { CSSProperties, ReactNode } from 'react';
+import { memo, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { Box, Tooltip } from '@mui/material';
 import { useDesignerT, type DesignerTranslate } from '../designerContext';
 import {
@@ -35,7 +35,6 @@ const PAGE_HEIGHT_LANDSCAPE = PAGE_WIDTH * (210 / 297);
 const PT_TO_PX = 1.55;
 const px = (pt: number) => pt * PT_TO_PX;
 
-const DEFAULT_FONT_SIZE = 9;
 const INK = '#0F172A';
 const MUTED = '#94A3B8';
 
@@ -529,39 +528,58 @@ export interface DesignerCanvasProps {
   editing?: DesignerEditing;
 }
 
-export default function DesignerCanvas({ doc, lang, selectedId, onSelect, scale, fieldTypes, editing }: DesignerCanvasProps) {
+type CanvasSheetProps = Omit<DesignerCanvasProps, 'scale'>;
+
+/**
+ * The A4 sheet's actual content — split out from `DesignerCanvas` and memoized so that a
+ * `scale` change alone (the ResizeObserver-driven center-column resize in DesignerShell) only
+ * re-renders the thin scale-transform wrapper below, not this entire per-node render tree.
+ * `doc`'s model layer deep-clones on every edit (no structural sharing), so an actual doc edit
+ * still re-renders the whole sheet — this only saves the re-renders that touch none of these
+ * props (a sibling panel toggling, a popover opening, a window resize while idle, …).
+ */
+const CanvasSheet = memo(function CanvasSheet({ doc, lang, selectedId, onSelect, fieldTypes, editing }: CanvasSheetProps) {
   const t = useDesignerT();
-  const baseFontSize = doc.defaultStyle?.fontSize ?? DEFAULT_FONT_SIZE;
-  const ctx: RenderCtx = { lang, selectedId, onSelect, t, baseFontSize, fieldTypes, editing };
+  const baseFontSize = doc.defaultStyle?.fontSize ?? Number(ELEMENT_DEFAULTS.style.fontSize);
+  const ctx: RenderCtx = useMemo(
+    () => ({ lang, selectedId, onSelect, t, baseFontSize, fieldTypes, editing }),
+    [lang, selectedId, onSelect, t, baseFontSize, fieldTypes, editing],
+  );
   // Margin default mirrors the server parser (ReportDefinitionParser.cs `?? 24`).
   const margin = px(doc.page?.margin ?? 24);
   const pageHeight = doc.page?.orientation === 'landscape' ? PAGE_HEIGHT_LANDSCAPE : PAGE_HEIGHT_PORTRAIT;
 
   return (
+    <Box
+      data-testid="designer-canvas-sheet"
+      onClick={() => onSelect(REPORT_SETTINGS_ID)}
+      sx={{
+        width: PAGE_WIDTH, minHeight: pageHeight, boxSizing: 'border-box',
+        bgcolor: '#fff', borderRadius: '2px', p: `${margin}px`,
+        boxShadow: '0 1px 3px rgba(15,23,42,0.12), 0 8px 28px rgba(15,23,42,0.10)',
+        display: 'flex', flexDirection: 'column',
+      }}
+    >
+      {doc.pageHeader && <CanvasElement node={doc.pageHeader} ctx={ctx} />}
+
+      {/* Body: consecutive half-width containers pair two-per-row on the grid. */}
+      <ElementSequence nodes={doc.body ?? []} ctx={ctx} rowGap="10px" columnGap="10px" sx={{ paddingTop: 12 }} />
+
+      {/* Fine-effort footer pinning: a flex spacer pushes it to the sheet bottom. */}
+      <Box sx={{ flexGrow: 1 }} />
+      {doc.pageFooter && (
+        <Box sx={{ mt: '14px' }}>
+          <CanvasElement node={doc.pageFooter} ctx={ctx} />
+        </Box>
+      )}
+    </Box>
+  );
+});
+
+export default function DesignerCanvas({ doc, lang, selectedId, onSelect, scale, fieldTypes, editing }: DesignerCanvasProps) {
+  return (
     <Box sx={{ transform: `scale(${scale})`, transformOrigin: 'top center', my: 4 }}>
-      <Box
-        data-testid="designer-canvas-sheet"
-        onClick={() => onSelect(REPORT_SETTINGS_ID)}
-        sx={{
-          width: PAGE_WIDTH, minHeight: pageHeight, boxSizing: 'border-box',
-          bgcolor: '#fff', borderRadius: '2px', p: `${margin}px`,
-          boxShadow: '0 1px 3px rgba(15,23,42,0.12), 0 8px 28px rgba(15,23,42,0.10)',
-          display: 'flex', flexDirection: 'column',
-        }}
-      >
-        {doc.pageHeader && <CanvasElement node={doc.pageHeader} ctx={ctx} />}
-
-        {/* Body: consecutive half-width containers pair two-per-row on the grid. */}
-        <ElementSequence nodes={doc.body ?? []} ctx={ctx} rowGap="10px" columnGap="10px" sx={{ paddingTop: 12 }} />
-
-        {/* Fine-effort footer pinning: a flex spacer pushes it to the sheet bottom. */}
-        <Box sx={{ flexGrow: 1 }} />
-        {doc.pageFooter && (
-          <Box sx={{ mt: '14px' }}>
-            <CanvasElement node={doc.pageFooter} ctx={ctx} />
-          </Box>
-        )}
-      </Box>
+      <CanvasSheet doc={doc} lang={lang} selectedId={selectedId} onSelect={onSelect} fieldTypes={fieldTypes} editing={editing} />
     </Box>
   );
 }
