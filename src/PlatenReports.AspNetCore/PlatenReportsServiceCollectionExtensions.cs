@@ -1,16 +1,19 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using PlatenReports;
+using PlatenReports.AspNetCore;
 
-namespace PlatenReports.AspNetCore;
+namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>Wires the reporting engine into a host's service collection.</summary>
 /// <remarks>
-/// Extensions live in this package's own namespace rather than
-/// <c>Microsoft.Extensions.DependencyInjection</c>, matching <c>PlatenReports.NCalc</c>'s
-/// <c>AddNCalcReportConditions()</c>. A host adds one <c>using</c> and gets every
-/// Platen registration together.
+/// Declared in <c>Microsoft.Extensions.DependencyInjection</c> so the methods surface in a host's
+/// <c>Program.cs</c> without a further <c>using</c> — the convention most of the .NET ecosystem
+/// follows for <c>Add*</c> extensions. The class is named for what it registers rather than
+/// <c>ServiceCollectionExtensions</c>, because that namespace is shared with every other package
+/// doing the same, including <c>PlatenReports.NCalc</c>; two types of the same name there are
+/// ambiguous the moment anyone refers to one.
 /// </remarks>
-public static class ServiceCollectionExtensions
+public static class PlatenReportsServiceCollectionExtensions
 {
     /// <summary>
     /// Registers <see cref="IReportingService"/> and the two collaborators it takes that have
