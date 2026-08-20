@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it , vi} from 'vitest';
-import type { ReportCatalogueItem, ReportPreviewRequest } from '@platen-reports/model';
+import type { ReportCatalogueItem, ReportPreviewBlob, ReportPreviewRequest } from '@platen-reports/model';
 import type { DesignerTranslate } from '../designerContext';
 import { DesignerTestProvider, stubReportsApi } from '../test/harness';
 import DesignerPreviewTab from './DesignerPreviewTab';
@@ -11,7 +11,7 @@ const PREVIEW_DEBOUNCE_MS = 900;
 
 // ─── Injected API client (#2445 — no module mock; the port comes from the provider) ──
 
-const mockPreviewPdf = vi.fn<(request: ReportPreviewRequest) => Promise<Blob>>();
+const mockPreviewPdf = vi.fn<(request: ReportPreviewRequest) => Promise<ReportPreviewBlob>>();
 const api = stubReportsApi({ previewPdf: (request) => mockPreviewPdf(request) });
 
 // The translator must be referentially stable across renders (as a real i18n library's
@@ -166,6 +166,28 @@ describe('DesignerPreviewTab', () => {
 
     expect(screen.getByTestId('designer-preview-frame')).toHaveAttribute('src', 'blob:second');
     expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:default');
+  });
+
+  it('reports a client that resolves something other than a Blob, and mints no URL', async () => {
+    // #10 widened the port to a Blob-*shaped* payload so the published declarations stop
+    // needing a DOM lib. createObjectURL still takes no substitute, so the component narrows
+    // with `instanceof` and turns a duck-typed payload into a preview error the host can act
+    // on — rather than letting jsdom or a browser throw an opaque overload failure.
+    const notABlob: ReportPreviewBlob = {
+      size: 8,
+      type: 'application/pdf',
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+    };
+    mockPreviewPdf.mockResolvedValue(notABlob);
+
+    render(<DesignerPreviewTab reportKey="asset-print" report={report} lang="en" />);
+    fireEvent.change(paramField(), { target: { value: 'a-1' } });
+    await act(async () => { vi.advanceTimersByTime(PREVIEW_DEBOUNCE_MS); });
+    await act(async () => {});
+
+    expect(screen.getByText(/must resolve to a Blob/)).toBeInTheDocument();
+    expect(mockCreateObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('designer-preview-frame')).not.toBeInTheDocument();
   });
 
   it('revokes the displayed object URL on unmount', async () => {
