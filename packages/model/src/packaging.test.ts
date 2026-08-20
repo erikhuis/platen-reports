@@ -33,9 +33,12 @@ describe('packaging', () => {
     expect(manifest.peerDependencies ?? {}).toEqual({});
   });
 
-  it('keeps its dev dependencies to types only', () => {
-    // Anything else here is a hint that something crept into the source.
-    expect(Object.keys(manifest.devDependencies ?? {})).toEqual(['@types/node']);
+  it('keeps its dev dependencies to types and the compiler', () => {
+    // Anything else here is a hint that something crept into the source. TypeScript earns its
+    // place: declarations.test.ts compiles the emitted .d.ts as a strict consumer would, which
+    // needs a compiler, and leaning on the workspace root to resolve one is an undeclared
+    // dependency. Neither ships — `files` is dist + README + LICENCE.
+    expect(Object.keys(manifest.devDependencies ?? {})).toEqual(['@types/node', 'typescript']);
   });
 
   it('imports nothing outside this package', () => {
@@ -65,8 +68,10 @@ describe('packaging', () => {
           if (specifier.startsWith('.')) {
             continue;
           }
+          // Test files may reach for the runner, node builtins, and the compiler that
+          // declarations.test.ts runs over dist/. Nothing that ships may reach for anything.
           const allowedInTests = file.endsWith('.test.ts')
-            && (specifier === 'vitest' || specifier.startsWith('node:'));
+            && (specifier === 'vitest' || specifier === 'typescript' || specifier.startsWith('node:'));
           if (!allowedInTests) {
             offenders.push(`${file} → ${specifier}`);
           }

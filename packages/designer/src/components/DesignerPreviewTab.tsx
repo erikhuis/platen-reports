@@ -105,6 +105,16 @@ export default function DesignerPreviewTab({ reportKey, report, lang, draftDefin
           // #2445 — the client hands back a Blob and this component owns the object URL for
           // its whole life: created here, revoked on replacement, staleness and unmount.
           if (requestId !== requestIdRef.current) return; // superseded — nothing created yet
+          // The port promises only a Blob-*shaped* payload: naming `Blob` in the model's
+          // published declarations put an ambient DOM dependency in them, and a consumer
+          // compiling without a DOM lib got TS2304 out of our own .d.ts (#10). A browser host
+          // still has to hand back the real thing, because createObjectURL takes no substitute.
+          // `instanceof` narrows the type, so this needs no cast, and a host that returns
+          // something else gets a message naming the problem rather than a DOM overload error
+          // — it lands in the .catch below and surfaces as the preview error.
+          if (!(blob instanceof Blob)) {
+            throw new TypeError('previewPdf must resolve to a Blob: the preview is shown via URL.createObjectURL.');
+          }
           const url = URL.createObjectURL(blob);
           if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
           previewUrlRef.current = url;

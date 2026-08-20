@@ -47,13 +47,26 @@ of the public surface and may be reorganised.
 
 ## TypeScript requirement
 
-`ReportsApiClient.previewPdf` returns a `Blob`, so your `tsconfig.json` needs a lib that
-declares one — either `"lib": ["…", "DOM"]` (any browser or bundler setup) or `@types/node`
-(Node 18+, where `Blob` is global). Both are the common case.
+None beyond ES2022. These declarations name nothing from the `DOM` lib or `@types/node`, so a
+project with `"lib": ["ES2022"]`, `"types": []` and `skipLibCheck: false` compiles them clean.
+A test compiles the emitted `dist/index.d.ts` under exactly that profile on every run.
 
-A project with neither — say `"lib": ["ES2022"]` and no `@types/node` — will see
-`TS2304: Cannot find name 'Blob'` from this package's declarations. Tracked as
-[platen-reports#10](https://github.com/erikhuis/platen-reports/issues/10).
+`ReportsApiClient.previewPdf` used to return a `Blob`, which put an ambient type in the
+published declarations and produced `TS2304: Cannot find name 'Blob'` in builds that pin `lib`
+and check their declaration files. It now resolves to `ReportPreviewBlob` — the structural
+subset the contract actually uses:
+
+```ts
+interface ReportPreviewBlob {
+  readonly size: number;
+  readonly type: string;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+```
+
+A real `Blob` satisfies that shape, so a client that already returns one needs no change. In a
+browser host it should keep returning a real `Blob`: `@platen-reports/designer` renders the
+preview through `URL.createObjectURL`, which accepts nothing else.
 
 ## Versioning
 

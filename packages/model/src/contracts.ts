@@ -74,6 +74,28 @@ export interface ReportPreviewRequest {
   timeZone?: string;
 }
 
+/**
+ * The binary payload `previewPdf` resolves to: the structural subset of a `Blob` this contract
+ * actually needs.
+ *
+ * Naming `Blob` here would be an ambient dependency in the *published declarations*. `Blob` is a
+ * web standard but its TypeScript declaration ships in the `DOM` lib or `@types/node`, so a
+ * consumer compiling with `"lib": ["ES2022"]` and `"types": []` got `TS2304: Cannot find name
+ * 'Blob'` out of our own `.d.ts`. Two defaults hid it: an unspecified `lib` pulls in DOM, and
+ * `skipLibCheck: true` skips our declarations entirely — leaving exactly the Node-side consumer
+ * this package targets to hit it. See #10.
+ *
+ * A real `Blob` satisfies this shape structurally, so hosts keep returning one and nothing
+ * changes at runtime. Browser hosts should keep returning a real one:
+ * `@platen-reports/designer` hands the result to `URL.createObjectURL`, which accepts no
+ * substitute.
+ */
+export interface ReportPreviewBlob {
+  readonly size: number;
+  readonly type: string;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
 export interface ReportsApiClient {
   listReports(): Promise<ReportCatalogueItem[]>;
   getEffectiveDefinition(key: string): Promise<ReportEffectiveDefinition>;
@@ -85,10 +107,11 @@ export interface ReportsApiClient {
   deleteOverlay(key: string): Promise<void>;
   validateOverlay(key: string, overlayJson: string): Promise<ReportOverlayValidationResult>;
   /**
-   * Returns a Blob — the designer owns `createObjectURL`/`revokeObjectURL`. Splitting that
-   * ownership across the package boundary (client creates, caller revokes) leaks by default.
+   * Resolves to a Blob-shaped payload — the designer owns `createObjectURL`/`revokeObjectURL`.
+   * Splitting that ownership across the package boundary (client creates, caller revokes)
+   * leaks by default.
    */
-  previewPdf(request: ReportPreviewRequest): Promise<Blob>;
+  previewPdf(request: ReportPreviewRequest): Promise<ReportPreviewBlob>;
   /**
    * Href for an `<a target="_blank">` render link. Host-owned because the right URL differs
    * per host: one may point at a same-origin proxy, because a bare anchor navigation carries
