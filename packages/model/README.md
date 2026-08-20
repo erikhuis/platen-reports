@@ -68,6 +68,16 @@ A real `Blob` satisfies that shape, so a client that already returns one needs n
 browser host it should keep returning a real `Blob`: `@platen-reports/designer` renders the
 preview through `URL.createObjectURL`, which accepts nothing else.
 
+**Migrating.** Implementing `ReportsApiClient` needs no change. *Calling* `previewPdf` may: the
+result is typed `ReportPreviewBlob`, so code that annotates it as a `Blob` or hands it to a DOM
+API that demands one needs to narrow first.
+
+```ts
+const preview = await api.previewPdf(request);
+if (!(preview instanceof Blob)) throw new TypeError('expected a Blob');
+const url = URL.createObjectURL(preview);   // narrowed — no cast
+```
+
 ## Versioning
 
 Every package in this repository shares one version and is released in lockstep. **Equal
