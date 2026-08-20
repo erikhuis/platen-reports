@@ -50,7 +50,24 @@ function diagnoseStrictConsumer(): string[] {
   expect(errors.map((e) => ts.flattenDiagnosticMessageText(e.messageText, ' '))).toEqual([]);
 
   const program = ts.createProgram([declarationsFile], options);
-  return [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()].map((d) => {
+
+  // Diagnostics are scoped to this one file deliberately. Unscoped they also cover TypeScript's
+  // own lib files, which this program does check because `skipLibCheck` is off — a diagnostic in
+  // a file nobody here wrote would be reported as ours.
+  const declarations = program.getSourceFile(declarationsFile);
+  if (!declarations) {
+    throw new Error(`${declarationsFile} never made it into the compiler's program`);
+  }
+
+  // "No errors" is only meaningful if there was something to check: an empty or truncated .d.ts
+  // compiles perfectly clean. Pin the port this package exists to publish, so a build that emits
+  // nothing fails here rather than passing as pristine.
+  expect(declarations.text).toContain('ReportsApiClient');
+
+  return [
+    ...program.getSyntacticDiagnostics(declarations),
+    ...program.getSemanticDiagnostics(declarations),
+  ].map((d) => {
     const message = ts.flattenDiagnosticMessageText(d.messageText, ' ');
     if (!d.file || d.start === undefined) {
       return `TS${d.code}: ${message}`;
