@@ -108,6 +108,7 @@ export type {
   ReportOverlayValidationResult,
   ReportFieldNode,
   ReportPreviewRequest,
+  ReportPreviewBlob,
   ReportsApiClient,
 } from './contracts';
 
