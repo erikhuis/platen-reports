@@ -3,15 +3,26 @@ description: Implement a platen-reports issue end-to-end — branch, code, tests
 argument-hint: <issue-number>
 ---
 
-# Implement issue #$ARGUMENTS
+# Implement Platen Reports issue #$ARGUMENTS
 
 Implement `erikhuis/platen-reports` issue #$ARGUMENTS end-to-end. **Issue and code both live in
 this repository**, so `gh` needs no `--repo`, a bare `#$ARGUMENTS` in a commit resolves
 correctly, and `Closes #$ARGUMENTS` in the PR body actually closes the issue.
 
-> Not to be confused with AssetWorld's `/implement_platen_issue`, which is for work **tracked in
-> AssetWorld** that lands here (the phase issues: publish, Sql, Pdf, conformance, docs). Use that
-> one from the AssetWorld checkout; use this one for this repo's own backlog.
+## 0. Confirm you are in the right repository — do this first
+
+This command works on **`erikhuis/platen-reports` only**. Its sibling,
+`/implement_assetworld_issue`, works on AssetWorld only. Neither may touch the other's tree: an
+issue number means different things in each, so a misdirected run edits real code against the
+wrong issue.
+
+```bash
+git remote get-url origin
+```
+
+It must contain `erikhuis/platen-reports`. **If it does not, stop immediately** — change nothing,
+create no branch, and tell the user which repository the session is actually in and which command
+they want. Do not "adapt" by adding `--repo` flags or reaching across into another checkout.
 
 Do every step in order. Commit and push as soon as it compiles and tests pass — before review,
 security and docs — so a dropped connection never loses work.
@@ -21,7 +32,16 @@ security and docs — so a dropped connection never loses work.
 `gh issue view $ARGUMENTS` — the full body and comments. Satisfy every acceptance criterion, and
 say so explicitly for each one when you report back.
 
-## 2. Branch
+## 2. Board lane and branch
+
+Move the issue to **In progress** on the *Platen Reports Kanban* board (project #2), which is
+where this repo's work is planned:
+
+```bash
+bash .claude/scripts/platen-lane.sh $ARGUMENTS "In progress"
+```
+
+Then branch.
 
 Never commit on `main`:
 
@@ -139,7 +159,11 @@ or asks which branch to look at, say the deep review did not run and why — nev
 gh pr checks <PR#> --watch
 gh pr merge <PR#> --squash --delete-branch
 git switch main && git pull --ff-only && git branch -D fix/$ARGUMENTS-<slug>
+bash .claude/scripts/platen-lane.sh $ARGUMENTS "Done"
 ```
+
+`Closes #$ARGUMENTS` closes the issue on merge, so do not close it by hand. Closing may also move
+the board item on its own; the lane call is harmless either way and makes the intent explicit.
 
 Red CI means something is actually broken; read the log and fix it. If `main` moved since the
 branch was cut, rebase and re-run build and tests — the green you reported was measured against a
@@ -157,6 +181,9 @@ uncommitted-review-changes reason as step 2.
 - **`pnpm pack`, never `npm pack`.** The designer depends on the model with `workspace:*` and only
   pnpm rewrites that to a real version; `npm pack` publishes the literal string and the package
   cannot be installed.
+- **Never touch the AssetWorld checkout.** If a change seems to need one, that is a second issue
+  in that repo, run with `/implement_assetworld_issue` — say so and stop rather than reaching
+  across.
 - If you cannot finish a step, comment on the issue describing where you stopped, push what you
   have, and stop. Do not merge half-broken code.
 
