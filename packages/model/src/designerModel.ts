@@ -1,7 +1,7 @@
 /**
  * Typed client model of a report definition.
  *
- * Mirrors the engine's own model — the eleven element types its parser accepts — so a
+ * Mirrors the engine's own model — every element type its parser accepts — so a
  * designer can never build a shape the parser would reject. Nothing here parses or renders;
  * this is the vocabulary both sides agree on.
  */
