@@ -256,6 +256,42 @@ export function countChangedProps(
   return keys.filter((k) => obj[k] !== undefined && obj[k] !== defaults[k]).length;
 }
 
+/**
+ * A node's `columns` / `pairs` as addressable items — tolerant of JSON that is not shaped the
+ * way the types claim.
+ *
+ * Every traversal here runs over documents and overlay payloads a HOST supplies. The types say
+ * `columns: TableColumnNode[]`, but nothing enforces that at runtime, and two shapes reach these
+ * walks routinely:
+ *
+ * - `keyValueGrid.columns` is the column COUNT, a number — so an untyped walker that reads
+ *   `node.columns` on any node hits a number, not a list (`standardModel`'s `locate` already
+ *   guards exactly this).
+ * - An overlay's `insert.element` is arbitrary JSON; `mergePreview` requires only an `id`.
+ *
+ * Anything that is not an array yields nothing. Two strengths, and the difference matters:
+ *
+ * - `nodesOf` keeps every object entry, id or not. Recursive walkers use it, because an entry
+ *   with no id of its own may still CONTAIN ids, and a walk that drops it stops seeing them.
+ * - `itemsOf` keeps only ADDRESSABLE entries — an object with a non-empty string `id` — for the
+ *   callers that key meta or a `Set` off `item.id`. An empty id is not addressable: registering
+ *   it would make every later empty-id entry collide with it and report a duplicate that
+ *   anchors to nothing. It is exactly what `classifyItems` treats as malformed, and the two
+ *   must agree.
+ *
+ * Callers that must REPORT a malformed entry rather than skip it — the validators — inspect the
+ * raw value themselves.
+ */
+export function nodesOf<T>(value: unknown): T[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((x): x is T => typeof x === 'object' && x !== null);
+}
+
+/** Addressable entries only — see `nodesOf` for why the two differ. */
+export function itemsOf<T extends { id: string }>(value: unknown): T[] {
+  return nodesOf<T>(value).filter((x) => typeof x.id === 'string' && x.id !== '');
+}
+
 /** Child elements of a node, when it is a structural parent. */
 export function childElements(node: ReportElementNode): ReportElementNode[] {
   switch (node.type) {
@@ -298,11 +334,11 @@ export function findSelection(doc: ReportDefinitionDoc, id: string): FoundSelect
   for (const element of walkElements(doc)) {
     if (element.id === id) return { element };
     if (element.type === 'table') {
-      const column = element.columns.find((c) => c.id === id);
+      const column = itemsOf<TableColumnNode>(element.columns).find((c) => c.id === id);
       if (column) return { element, column };
     }
     if (element.type === 'keyValueGrid') {
-      const pair = element.pairs.find((p) => p.id === id);
+      const pair = itemsOf<KeyValuePairNode>(element.pairs).find((p) => p.id === id);
       if (pair) return { element, pair };
     }
   }

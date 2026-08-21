@@ -157,6 +157,43 @@ describe('standardModel', () => {
   // Regression: table columns have no `type` discriminant either (same shape as grid pairs),
   // so keying ELEMENT_DEFAULTS off `node.type` never matched column.format's default ('') — it
   // was silently never stripped even though the analogous pair.format bug (above) was fixed.
+  // #34: direct authoring shares the problem vocabulary with validateInserted, so it shares
+  // this rule too — an item with no id of its own is reported against its owner rather than
+  // emitting a problem with a blank anchor. Unlike the overlay validator there is no
+  // published/inserted gate: in standard mode the author owns every element.
+  it('validateDefinition anchors a malformed column or pair to its owner', () => {
+    const d = doc();
+    d.body!.push({ id: 'grid', type: 'keyValueGrid', pairs: [{ id: 'p1', label: 'P', path: 'x' }, 7] } as never);
+    (d.body![1] as { columns: unknown[] }).columns.push('junk', { header: 'no id', path: 'x' });
+
+    const problems = validateDefinition(d);
+    expect(problems).toContainEqual({ id: 'tbl.columns[2]', code: 'columnMalformed' });
+    expect(problems).toContainEqual({ id: 'tbl.columns[3]', code: 'columnMalformed' });
+    expect(problems).toContainEqual({ id: 'grid.pairs[1]', code: 'pairMalformed' });
+    expect(problems.every((p) => typeof p.id === 'string' && p.id.length > 0)).toBe(true);
+    // Two id-less entries must not be mistaken for a duplicate of each other.
+    expect(problems.some((p) => p.code === 'duplicateId')).toBe(false);
+    // The well-formed items are untouched by any of this.
+    expect(problems.some((p) => p.id === 'c1' || p.id === 'p1')).toBe(false);
+  });
+
+  it('validateDefinition reports a columns field that is not a list, and does not throw', () => {
+    const d = doc();
+    (d.body![1] as unknown as { columns: unknown }).columns = { c1: 'x' };
+    const problems = validateDefinition(d);
+    expect(problems).toContainEqual({ id: 'tbl.columns', code: 'columnMalformed' });
+    expect(problems).toContainEqual({ id: 'tbl', code: 'tableMissingColumns' });
+  });
+
+  it('validateDefinition still checks every well-formed column, published or not', () => {
+    // Non-vacuity for the two tests above: the malformed path must not have swallowed the
+    // ordinary rule this function has always applied to direct authoring.
+    const d = doc();
+    (d.body![1] as { columns: { id: string; header: string; path?: string }[] })
+      .columns.push({ id: 'c3', header: 'C3' });
+    expect(validateDefinition(d)).toContainEqual({ id: 'c3', code: 'columnMissingValue' });
+  });
+
   it('serializeDefinition elides a table column format equal to its default', () => {
     const withTable = (): ReportDefinitionDoc => ({
       schemaVersion: 1, key: 'r', version: '1.0.0', title: 'R', dataSource: 'src',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ReportDefinitionDoc, ReportElementNode } from './designerModel';
 import {
-  BODY_PSEUDO_ANCHOR, collectAllIds, insertElement, isOverlayEmpty, mergePreview, nextId,
+  BODY_PSEUDO_ANCHOR, collectAllIds, collectSubtreeIds, insertElement, isOverlayEmpty, mergePreview, nextId,
   resetElementProp, restoreElement, serializeOverlay, setElementProp, suppressElement,
   validateInserted,
   type ReportOverlayDoc,
@@ -163,6 +163,100 @@ describe('overlayModel — merge preview server-parity edge cases', () => {
     expect(ghost.text).toBe('Detail');
   });
 
+  // #34: `mergePreview` runs inside the designer's render path, so a throw here is a blank
+  // screen rather than a reported problem. Its two UNTYPED walkers — collectSubtreeIds and
+  // setElementProp's findTarget — read `node.columns` on any node, and on a keyValueGrid that
+  // field is the column COUNT, a number. `for (const c of 2)` threw. The count is a documented
+  // part of the model (KeyValueGridElementNode.columns, ELEMENT_DEFAULTS.keyValueGrid), so this
+  // needs no malformed JSON at all: any producer that inserts a grid carrying its own column
+  // count crashed the merge. standardModel's `locate` already guarded exactly this shape.
+  it('mergePreview inserts a keyValueGrid that carries its numeric column count', () => {
+    const overlay: ReportOverlayDoc = {
+      insert: [{
+        id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto',
+        element: { id: 'grid-1', type: 'keyValueGrid', columns: 2, pairs: [{ id: 'gp-1', label: 'L', path: 'x' }] },
+      }],
+    };
+    const preview = mergePreview(standard(), overlay);
+    expect(preview.warnings).toHaveLength(0);
+    expect(preview.meta.get('grid-1')?.insertPatchId).toBe('ins-1');
+    // The count survives the merge untouched — it is a real property, not an item list.
+    const grid = preview.displayDoc.body!.find((n) => n.id === 'grid-1') as { columns?: unknown };
+    expect(grid.columns).toBe(2);
+    expect(validateInserted(preview)).toEqual([]);
+  });
+
+  it('collectAllIds sees the pair ids of a pending grid insert that also carries a column count', () => {
+    // The same walker backs id minting: if it stops early, nextId can re-mint an id the pending
+    // insert already uses, and ids are a stable public contract.
+    const overlay: ReportOverlayDoc = {
+      insert: [{
+        id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto',
+        element: { id: 'grid-1', type: 'keyValueGrid', columns: 2, pairs: [{ id: 'kvp-9', label: 'L', path: 'x' }] },
+      }],
+    };
+    const ids = collectAllIds(standard(), overlay);
+    expect(ids.has('kvp-9')).toBe(true);
+    expect(nextId('kvp', ids)).toBe('kvp-10');
+  });
+
+  it('mergePreview survives insert payloads whose columns/pairs are junk', () => {
+    // Each of these threw a raw TypeError out of mergePreview before #34 — from
+    // collectSubtreeIds for the non-arrays, and from the effectiveDoc prune for the null entry.
+    const overlay: ReportOverlayDoc = {
+      insert: [
+        { id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'tbl-1', type: 'table', bind: 'x', columns: {} } },
+        { id: 'ins-2', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'tbl-2', type: 'table', bind: 'x', columns: [null] } },
+        { id: 'ins-3', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'grid-2', type: 'keyValueGrid', pairs: 'nope' } },
+      ],
+    };
+    const preview = mergePreview(standard(), overlay);
+    expect(preview.displayDoc.body!.some((n) => n.id === 'tbl-1')).toBe(true);
+    // The unaddressable entry is dropped from the effective doc — nothing can select, edit or
+    // suppress a column with no id — and the validator reports it rather than the merge throwing.
+    const effective = preview.effectiveDoc.body!.find((n) => n.id === 'tbl-2') as { columns?: unknown[] };
+    expect(effective.columns).toEqual([]);
+    expect(validateInserted(preview)).toContainEqual({ id: 'tbl-2.columns[0]', code: 'columnMalformed' });
+  });
+
+  it('collectSubtreeIds keeps descending through a node that has no id of its own', () => {
+    // The collision scan exists to catch a clash on ANY id in the payload, so it must not stop
+    // at an id-less node: its descendants carry ids too. Filtering the walk to id-carrying
+    // entries silently narrowed it, and a nested clash then merged instead of being skipped.
+    const element = { id: 'box-1', type: 'container', children: [{ type: 'row', children: [{ id: 'deep', type: 'text' }] }] };
+    expect(collectSubtreeIds(element)).toEqual(['box-1', 'deep']);
+
+    const doc: ReportDefinitionDoc = { schemaVersion: 1, key: 'k', version: '1', body: [{ id: 'deep', type: 'text', text: 'published' }] };
+    const preview = mergePreview(doc, {
+      insert: [{ id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element }],
+    });
+    expect(preview.warnings.some((w) => w.code === 'InsertIdCollision' && w.targetId === 'deep')).toBe(true);
+    expect(preview.displayDoc.body!.some((n) => n.id === 'box-1')).toBe(false);
+  });
+
+  it('validateInserted treats an empty-string id as unaddressable, not as a duplicate', () => {
+    // `id: ''` is a string, so an id-check that only looks at the type registers it — and the
+    // second empty id then collides with the first, reporting a duplicateId whose own anchor is
+    // blank. That is the #34 defect wearing a different shape, so the tolerant reader and the
+    // classifier have to agree that empty is not addressable.
+    const overlay: ReportOverlayDoc = {
+      insert: [{
+        id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto',
+        element: { id: 'tbl-1', type: 'table', bind: 'x', columns: [{ id: '', header: 'A', path: 'a' }, { id: '', header: 'B', path: 'b' }] },
+      }],
+    };
+    const problems = validateInserted(mergePreview(standard(), overlay));
+    expect(problems).toEqual([
+      { id: 'tbl-1.columns[0]', code: 'columnMalformed' },
+      { id: 'tbl-1.columns[1]', code: 'columnMalformed' },
+      // Accurate, not noise: neither column can be addressed, so the table has none.
+      { id: 'tbl-1', code: 'tableMissingColumns' },
+    ]);
+    // The point of the test: no problem anchors to the empty id, and none is a duplicateId.
+    expect(problems.every((p) => p.id !== '')).toBe(true);
+    expect(problems.some((p) => p.code === 'duplicateId')).toBe(false);
+  });
+
   it('validateInserted flags a duplicate column id anywhere in the document', () => {
     const doc: ReportDefinitionDoc = {
       schemaVersion: 1, key: 'k', version: '1',
@@ -259,6 +353,58 @@ describe('overlayModel — merge preview server-parity edge cases', () => {
     const problems = validateInserted(mergePreview(doc, overlay));
     expect(problems.some((p) => p.code === 'columnMissingValue')).toBe(false);
     expect(problems.some((p) => p.code === 'pairMissingValue')).toBe(false);
+  });
+
+  // #34: an entry that is not an object with an id has no id to anchor a problem to. The old
+  // code pushed `{ id: undefined }`, which renders as a blank heading in the problems popover,
+  // and `registerId(undefined)` made every later id-less entry collide into a phantom
+  // duplicateId. Report it against the owner instead, positionally.
+  it('validateInserted anchors a malformed inserted column or pair to its owner', () => {
+    const overlay: ReportOverlayDoc = {
+      insert: [
+        { id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'tbl-1', type: 'table', bind: 'x', columns: ['a', 'b'] } },
+        { id: 'ins-2', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'grid-1', type: 'keyValueGrid', pairs: [null, { id: 'gp-ok', label: 'L', path: 'p' }] } },
+      ],
+    };
+    const problems = validateInserted(mergePreview(standard(), overlay));
+
+    expect(problems).toContainEqual({ id: 'tbl-1.columns[0]', code: 'columnMalformed' });
+    expect(problems).toContainEqual({ id: 'tbl-1.columns[1]', code: 'columnMalformed' });
+    expect(problems).toContainEqual({ id: 'grid-1.pairs[0]', code: 'pairMalformed' });
+
+    // Every problem carries a usable anchor, and no phantom duplicate is invented for the
+    // second id-less entry.
+    expect(problems.every((p) => typeof p.id === 'string' && p.id.length > 0)).toBe(true);
+    expect(problems.some((p) => p.code === 'duplicateId')).toBe(false);
+    // The one well-formed pair still validates on its own id, not positionally.
+    expect(problems.some((p) => p.id === 'gp-ok')).toBe(false);
+  });
+
+  it('validateInserted reports a columns/pairs field that is not a list at all', () => {
+    const overlay: ReportOverlayDoc = {
+      insert: [
+        { id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'tbl-1', type: 'table', bind: 'x', columns: {} } },
+        { id: 'ins-2', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'grid-1', type: 'keyValueGrid', pairs: 3 } },
+      ],
+    };
+    const problems = validateInserted(mergePreview(standard(), overlay));
+    expect(problems).toContainEqual({ id: 'tbl-1.columns', code: 'columnMalformed' });
+    expect(problems).toContainEqual({ id: 'grid-1.pairs', code: 'pairMalformed' });
+    // A table whose columns cannot be read has no columns either — both are true and the two
+    // problems carry different anchors, so neither hides the other.
+    expect(problems).toContainEqual({ id: 'tbl-1', code: 'tableMissingColumns' });
+  });
+
+  it('validateInserted leaves a published owner\'s malformed items alone', () => {
+    // Same rule as #12: content inside a published owner belongs to the definition, not the
+    // overlay — and with no id there is no way to ask whether the item itself was inserted.
+    const doc = standard();
+    const lines = doc.body!.find((n) => n.id === 'lines') as { columns: unknown[] };
+    lines.columns.push('junk');
+
+    const problems = validateInserted(mergePreview(doc, emptyOverlay()));
+    expect(problems.some((p) => p.code === 'columnMalformed')).toBe(false);
+    expect(problems).toEqual([]);
   });
 
   it('validateInserted reports, rather than throws, on an insert payload with no columns or pairs', () => {

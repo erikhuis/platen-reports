@@ -13,7 +13,7 @@
  */
 
 import {
-  childElements, KNOWN_ELEMENT_TYPES, walkElements,
+  childElements, itemsOf, KNOWN_ELEMENT_TYPES, nodesOf, walkElements,
   type KeyValuePairNode, type ReportDefinitionDoc, type ReportElementNode, type TableColumnNode,
 } from './designerModel';
 
@@ -61,6 +61,10 @@ export type OverlayProblemCode =
   | 'columnMissingValue'
   | 'pairMissingValue'
   | 'unsupportedImageSource'
+  // Item shape. Raised against the OWNER (`tbl-1.columns[2]`, the `parameters[i]` convention)
+  // because an item this broken has no id of its own to anchor to.
+  | 'columnMalformed'
+  | 'pairMalformed'
   // Placement / layout.
   | 'pageNumberInBody'
   | 'invalidContainerWidth';
@@ -142,8 +146,8 @@ export function collectDocIds(doc: ReportDefinitionDoc): Set<string> {
   const ids = new Set<string>();
   for (const el of walkElements(doc)) {
     ids.add(el.id);
-    if (el.type === 'table') for (const c of el.columns ?? []) ids.add(c.id);
-    if (el.type === 'keyValueGrid') for (const p of el.pairs ?? []) ids.add(p.id);
+    if (el.type === 'table') for (const c of itemsOf<TableColumnNode>(el.columns)) ids.add(c.id);
+    if (el.type === 'keyValueGrid') for (const p of itemsOf<KeyValuePairNode>(el.pairs)) ids.add(p.id);
   }
   return ids;
 }
@@ -173,9 +177,13 @@ export function collectSubtreeIds(element: Record<string, unknown>): string[] {
   const visit = (node: AnyNode | undefined) => {
     if (!node || typeof node !== 'object') return;
     if (typeof node.id === 'string') ids.push(node.id);
-    for (const child of (node.children as AnyNode[] | undefined) ?? []) visit(child);
-    for (const c of (node.columns as AnyNode[] | undefined) ?? []) visit(c);
-    for (const p of (node.pairs as AnyNode[] | undefined) ?? []) visit(p);
+    // Untyped walk: `node` is payload JSON, so `columns` may be a grid's column COUNT rather
+    // than a list. nodesOf yields nothing for a number, where a bare `?? []` threw — and it is
+    // deliberately the WEAKER filter: an entry with no id of its own may still contain ids, and
+    // this scan exists to catch a clash on ANY id in the payload.
+    for (const child of nodesOf<AnyNode>(node.children)) visit(child);
+    for (const c of nodesOf<AnyNode>(node.columns)) visit(c);
+    for (const p of nodesOf<AnyNode>(node.pairs)) visit(p);
   };
   visit(element as AnyNode);
   return ids;
@@ -205,11 +213,11 @@ function findAnywhere(doc: ReportDefinitionDoc, id: string):
   for (const el of walkElements(doc)) {
     if (el.id === id) return { kind: 'element', node: el };
     if (el.type === 'table') {
-      const c = el.columns?.find((x) => x.id === id);
+      const c = itemsOf<TableColumnNode>(el.columns).find((x) => x.id === id);
       if (c) return { kind: 'column', owner: el, node: c };
     }
     if (el.type === 'keyValueGrid') {
-      const p = el.pairs?.find((x) => x.id === id);
+      const p = itemsOf<KeyValuePairNode>(el.pairs).find((x) => x.id === id);
       if (p) return { kind: 'pair', owner: el, node: p };
     }
   }
@@ -324,9 +332,9 @@ export function mergePreview(standard: ReportDefinitionDoc, overlay: ReportOverl
     const hit = findAnywhere(displayDoc, id);
     if (hit && hit.kind !== 'element') {
       const owner = hit.owner;
-      const list = hit.kind === 'column'
-        ? (owner.type === 'table' ? owner.columns : [])
-        : (owner.type === 'keyValueGrid' ? owner.pairs : []);
+      const list: { id: string }[] = hit.kind === 'column'
+        ? (owner.type === 'table' ? itemsOf<TableColumnNode>(owner.columns) : [])
+        : (owner.type === 'keyValueGrid' ? itemsOf<KeyValuePairNode>(owner.pairs) : []);
       const stillVisible = list.filter((x) => !meta.get(x.id)?.suppressed);
       const referenced = hit.kind === 'column' && owner.type === 'table'
         && [...(owner.totals ?? []), ...(owner.groupTotals ?? [])].some((t) => t.columnId === id);
@@ -398,8 +406,14 @@ export function mergePreview(standard: ReportDefinitionDoc, overlay: ReportOverl
     nodes?.filter((n) => !meta.get(n.id)?.suppressed).map((n) => {
       const next = { ...n } as ReportElementNode;
       if ('children' in next) (next as { children?: ReportElementNode[] }).children = prune((next as { children?: ReportElementNode[] }).children) ?? [];
-      if (next.type === 'table') next.columns = next.columns?.filter((c) => !meta.get(c.id)?.suppressed);
-      if (next.type === 'keyValueGrid') next.pairs = next.pairs?.filter((p) => !meta.get(p.id)?.suppressed);
+      // `!== undefined` keeps an absent list absent (effectiveDoc is compared as JSON); itemsOf
+      // drops items with no id, which no consumer could address and meta cannot key.
+      if (next.type === 'table' && next.columns !== undefined) {
+        next.columns = itemsOf<TableColumnNode>(next.columns).filter((c) => !meta.get(c.id)?.suppressed);
+      }
+      if (next.type === 'keyValueGrid' && next.pairs !== undefined) {
+        next.pairs = itemsOf<KeyValuePairNode>(next.pairs).filter((p) => !meta.get(p.id)?.suppressed);
+      }
       return next;
     });
   effectiveDoc.body = prune(effectiveDoc.body) ?? [];
@@ -447,12 +461,13 @@ export function setElementProp(
       if (op.id !== insertPatchId) return op;
       const findTarget = (el: AnyNode): AnyNode | null => {
         if (el.id === id) return el;
-        for (const child of (el.children as AnyNode[] | undefined) ?? []) {
+        // nodesOf, not itemsOf: an id-less node still holds descendants that DO carry ids.
+        for (const child of nodesOf<AnyNode>(el.children)) {
           const hit = findTarget(child);
           if (hit) return hit;
         }
-        for (const c of (el.columns as AnyNode[] | undefined) ?? []) if (c.id === id) return c;
-        for (const p of (el.pairs as AnyNode[] | undefined) ?? []) if (p.id === id) return p;
+        for (const c of nodesOf<AnyNode>(el.columns)) if (c.id === id) return c;
+        for (const p of nodesOf<AnyNode>(el.pairs)) if (p.id === id) return p;
         return null;
       };
       const element = clone(op.element) as AnyNode;
@@ -543,6 +558,41 @@ export function insertElement(
 
 // ─── Save-time validation (fatal problems on OVERLAY-INSERTED elements) ─────
 
+/** One entry of a table's `columns` or a grid's `pairs`, as the validators see it. */
+export interface ClassifiedItem {
+  /** Anchor for any problem about this entry: its own id, or a positional id on the owner. */
+  id: string;
+  /** The entry itself — absent when it is malformed, which is what `id` then encodes. */
+  node?: { id: string; path?: unknown; template?: unknown };
+}
+
+/**
+ * Classify a table's `columns` / grid's `pairs` per entry, so the two validators cannot drift on
+ * what "malformed" means — the kind of drift that produced #11 and #12.
+ *
+ * An entry is addressable when it is an object carrying a non-empty string `id`: a problem can be
+ * anchored to it and its value checked. It is not when the field is not a list at all, or the
+ * entry is not such an object — those take a positional anchor on the owner (`tbl-1.columns[2]`),
+ * following the `parameters[i]` convention `validateDefinition` already uses for an unnamed
+ * parameter. Reporting them matters: an item with no id renders as nothing and can never be
+ * selected, edited or suppressed, so a validator that skipped it would wave through content the
+ * author cannot even see, and one that anchored a problem to its missing id would emit a row with
+ * a blank heading (#34).
+ *
+ * An ABSENT field yields nothing — a table with no `columns` is already `tableMissingColumns`,
+ * and a grid with no `pairs` has never been a problem.
+ */
+export function classifyItems(ownerId: string, raw: unknown, field: 'columns' | 'pairs'): ClassifiedItem[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) return [{ id: `${ownerId}.${field}` }];
+  return raw.map((item, index) => {
+    const id = typeof item === 'object' && item !== null ? (item as { id?: unknown }).id : undefined;
+    return typeof id === 'string' && id !== ''
+      ? { id, node: item as { id: string; path?: unknown; template?: unknown } }
+      : { id: `${ownerId}.${field}[${index}]` };
+  });
+}
+
 export function validateInserted(preview: MergePreview): OverlayProblem[] {
   const problems: OverlayProblem[] = [];
   const seen = new Set<string>();
@@ -565,15 +615,45 @@ export function validateInserted(preview: MergePreview): OverlayProblem[] {
   };
   const isInsert = (id: string): boolean => Boolean(preview.meta.get(id)?.insertPatchId);
 
+  /**
+   * Value checks for a table's columns or a grid's pairs, per item. Runs BEFORE the owner gate.
+   *
+   * An addressable item is checked for a value on owner-inserted OR item-inserted (#12). An
+   * unaddressable one cannot be value-checked and has no id to anchor to, so it is reported
+   * against the owner — silently skipping it would let the overlay save content that renders as
+   * nothing, which is the failure mode #12 exists to prevent (#34).
+   *
+   * Unaddressable items are reported only when the OWNER is an insert: a published owner's
+   * content belongs to the definition, and with no id there is no way to ask whether the item
+   * itself came from one.
+   */
+  const checkItems = (
+    owner: ReportElementNode,
+    raw: unknown,
+    field: 'columns' | 'pairs',
+    missingValue: OverlayProblemCode,
+    malformed: OverlayProblemCode,
+  ): void => {
+    const ownerInserted = isInsert(owner.id);
+    for (const item of classifyItems(owner.id, raw, field)) {
+      if (!item.node) {
+        if (ownerInserted) problems.push({ id: item.id, code: malformed });
+        continue;
+      }
+      if (!ownerInserted && !isInsert(item.id)) continue;
+      if (!item.node.path && !item.node.template) problems.push({ id: item.id, code: missingValue });
+    }
+  };
+
   for (const el of walkElements(preview.displayDoc)) {
     registerId(el.id);
     // Column/pair ids share the document id namespace (they are overlay anchors), so a
     // duplicate anywhere is a problem — mirror the server's subtree id-uniqueness scan.
-    // `?? []` is load-bearing, not defensive typing: `insert.element` is arbitrary host JSON
-    // and mergePreview only requires it to carry an id, so a table payload with no `columns`
-    // reaches here and must produce `tableMissingColumns` rather than throw.
-    if (el.type === 'table') for (const c of el.columns ?? []) registerId(c.id);
-    if (el.type === 'keyValueGrid') for (const p of el.pairs ?? []) registerId(p.id);
+    // itemsOf is load-bearing, not defensive typing: `insert.element` is arbitrary host JSON
+    // and mergePreview only requires it to carry an id. Registering an item with no id would
+    // also make every LATER id-less item collide with it and report a phantom duplicateId (#34).
+    if (el.type === 'table') for (const c of itemsOf<TableColumnNode>(el.columns)) registerId(c.id);
+    if (el.type === 'keyValueGrid') for (const p of itemsOf<KeyValuePairNode>(el.pairs)) registerId(p.id);
 
     // Column/pair value checks run BEFORE the owner gate, once per item. `metaFor` keys meta
     // by each inserted node's OWN id, so a column added to a *published* table is an insert
@@ -583,17 +663,8 @@ export function validateInserted(preview: MergePreview): OverlayProblem[] {
     // column ids. Published items inside published owners stay unflagged: that content
     // belongs to the definition, not the overlay.
     const ownerInserted = isInsert(el.id);
-    if (el.type === 'table') {
-      for (const c of el.columns ?? []) {
-        if (!ownerInserted && !isInsert(c.id)) continue;
-        if (!c.path && !c.template) problems.push({ id: c.id, code: 'columnMissingValue' });
-      }
-    } else if (el.type === 'keyValueGrid') {
-      for (const p of el.pairs ?? []) {
-        if (!ownerInserted && !isInsert(p.id)) continue;
-        if (!p.path && !p.template) problems.push({ id: p.id, code: 'pairMissingValue' });
-      }
-    }
+    if (el.type === 'table') checkItems(el, el.columns, 'columns', 'columnMissingValue', 'columnMalformed');
+    else if (el.type === 'keyValueGrid') checkItems(el, el.pairs, 'pairs', 'pairMissingValue', 'pairMalformed');
     if (!ownerInserted) continue;
 
     if (!Object.hasOwn(KNOWN_ELEMENT_TYPES, el.type)) { problems.push({ id: el.id, code: 'unknownElementType', values: { type: el.type } }); continue; }
@@ -610,7 +681,7 @@ export function validateInserted(preview: MergePreview): OverlayProblem[] {
       case 'table':
         // Per-column values are checked above, for inserted owners and inserted columns alike.
         if (!el.bind) problems.push({ id: el.id, code: 'tableMissingBind' });
-        else if (!el.columns?.length) problems.push({ id: el.id, code: 'tableMissingColumns' });
+        else if (!itemsOf<TableColumnNode>(el.columns).length) problems.push({ id: el.id, code: 'tableMissingColumns' });
         break;
       case 'image':
         if ((el.source ?? 'tenantLogo') !== 'tenantLogo') {
