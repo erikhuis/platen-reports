@@ -192,6 +192,69 @@ describe('overlayModel — merge preview server-parity edge cases', () => {
     expect(problems.some((p) => p.code === 'columnMissingValue' && p.id === 'tc-1')).toBe(true);
     expect(problems.some((p) => p.code === 'unknownElementType' && p.id === 'bogus-1')).toBe(true);
   });
+
+  // Regression (#12): the column/pair value checks sat behind `if (!meta.get(el.id)?.insertPatchId)
+  // continue`, which gates on the OWNING element being an insert. But meta is keyed by each
+  // inserted node's own id, so an item added to a published owner — the common customisation —
+  // never had its value checked and saved clean with no path and no template.
+  it('validateInserted flags a valueless column or pair inserted into a PUBLISHED owner', () => {
+    const overlay: ReportOverlayDoc = {
+      insert: [
+        { id: 'ins-1', anchor: 'col-code', position: 'after', element: { id: 'col-new', header: 'New' } },
+        { id: 'ins-2', anchor: 'kv-status', position: 'after', element: { id: 'kv-new', label: 'New' } },
+      ],
+    };
+    const preview = mergePreview(standard(), overlay);
+    // The owners themselves are published — only the items are inserts.
+    expect(preview.meta.get('lines')?.insertPatchId).toBeUndefined();
+    expect(preview.meta.get('summary')?.insertPatchId).toBeUndefined();
+    expect(preview.meta.get('col-new')?.insertPatchId).toBe('ins-1');
+    expect(preview.meta.get('kv-new')?.insertPatchId).toBe('ins-2');
+
+    const problems = validateInserted(preview);
+    expect(problems.some((p) => p.code === 'columnMissingValue' && p.id === 'col-new')).toBe(true);
+    expect(problems.some((p) => p.code === 'pairMissingValue' && p.id === 'kv-new')).toBe(true);
+  });
+
+  it('validateInserted still flags a valueless column nested in a WHOLLY inserted table', () => {
+    // The owner half of the gate is not redundant: an inserted table registers meta for the
+    // table id alone, never for its nested column/pair ids, so gating purely per-item would
+    // lose this direction.
+    const overlay: ReportOverlayDoc = {
+      insert: [
+        { id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'tbl-1', type: 'table', bind: 'x', columns: [{ id: 'tc-1', header: 'H' }] } },
+        { id: 'ins-2', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'grid-1', type: 'keyValueGrid', pairs: [{ id: 'gp-1', label: 'L' }] } },
+      ],
+    };
+    const preview = mergePreview(standard(), overlay);
+    expect(preview.meta.get('tc-1')?.insertPatchId).toBeUndefined();
+    expect(preview.meta.get('gp-1')?.insertPatchId).toBeUndefined();
+
+    const problems = validateInserted(preview);
+    expect(problems.some((p) => p.code === 'columnMissingValue' && p.id === 'tc-1')).toBe(true);
+    expect(problems.some((p) => p.code === 'pairMissingValue' && p.id === 'gp-1')).toBe(true);
+  });
+
+  it('validateInserted leaves published items alone and accepts an inserted item that has a value', () => {
+    // A published definition may legitimately carry a column with neither path nor template
+    // (that content is the definition's business, not the overlay's) — and an inserted item
+    // that does supply a value is fine. Without both, the fix above would just flag everything.
+    const doc = standard();
+    (doc.body![2] as { columns: { id: string; header: string; path?: string }[] })
+      .columns.push({ id: 'col-blank', header: 'Blank' });
+    (doc.body![0] as { pairs: { id: string; label: string; path?: string }[] })
+      .pairs.push({ id: 'kv-blank', label: 'Blank' });
+
+    const overlay: ReportOverlayDoc = {
+      insert: [
+        { id: 'ins-1', anchor: 'col-code', position: 'after', element: { id: 'col-ok', header: 'OK', path: 'ok' } },
+        { id: 'ins-2', anchor: 'kv-status', position: 'after', element: { id: 'kv-ok', label: 'OK', template: '{{ x }}' } },
+      ],
+    };
+    const problems = validateInserted(mergePreview(doc, overlay));
+    expect(problems.some((p) => p.code === 'columnMissingValue')).toBe(false);
+    expect(problems.some((p) => p.code === 'pairMissingValue')).toBe(false);
+  });
 });
 
 describe('overlayModel — op compilation', () => {
