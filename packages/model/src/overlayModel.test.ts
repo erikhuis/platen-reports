@@ -240,9 +240,14 @@ describe('overlayModel — merge preview server-parity edge cases', () => {
     // (that content is the definition's business, not the overlay's) — and an inserted item
     // that does supply a value is fine. Without both, the fix above would just flag everything.
     const doc = standard();
-    (doc.body![2] as { columns: { id: string; header: string; path?: string }[] })
+    const owner = <T>(id: string): T => {
+      const hit = doc.body!.find((n) => n.id === id);
+      if (!hit) throw new Error(`fixture no longer has '${id}'`);
+      return hit as T;
+    };
+    owner<{ columns: { id: string; header: string; path?: string }[] }>('lines')
       .columns.push({ id: 'col-blank', header: 'Blank' });
-    (doc.body![0] as { pairs: { id: string; label: string; path?: string }[] })
+    owner<{ pairs: { id: string; label: string; path?: string }[] }>('summary')
       .pairs.push({ id: 'kv-blank', label: 'Blank' });
 
     const overlay: ReportOverlayDoc = {
@@ -254,6 +259,22 @@ describe('overlayModel — merge preview server-parity edge cases', () => {
     const problems = validateInserted(mergePreview(doc, overlay));
     expect(problems.some((p) => p.code === 'columnMissingValue')).toBe(false);
     expect(problems.some((p) => p.code === 'pairMissingValue')).toBe(false);
+  });
+
+  it('validateInserted reports, rather than throws, on an insert payload with no columns or pairs', () => {
+    // `insert.element` is arbitrary host JSON — mergePreview only requires an id, and precise
+    // per-target payload validation is the server's job. A table payload with no `columns` at
+    // all used to reach the id-registration walk and die on `for (const c of el.columns)`,
+    // so a save-time validator threw where it owed the host a problem list.
+    const overlay: ReportOverlayDoc = {
+      insert: [
+        { id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'tbl-1', type: 'table', bind: 'x' } },
+        { id: 'ins-2', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element: { id: 'grid-1', type: 'keyValueGrid' } },
+      ],
+    };
+    const problems = validateInserted(mergePreview(standard(), overlay));
+    expect(problems.some((p) => p.code === 'tableMissingColumns' && p.id === 'tbl-1')).toBe(true);
+    expect(problems.some((p) => p.id === 'grid-1')).toBe(false);
   });
 });
 
