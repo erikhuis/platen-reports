@@ -269,15 +269,27 @@ export function countChangedProps(
  *   guards exactly this).
  * - An overlay's `insert.element` is arbitrary JSON; `mergePreview` requires only an `id`.
  *
- * Anything that is not an array yields no items, and items that cannot be addressed (not an
- * object, or with no string `id`) are dropped, because every caller keys meta or ids off
- * `item.id`. Callers that must REPORT a malformed item rather than skip it — the validators —
- * inspect the raw value themselves.
+ * Anything that is not an array yields nothing. Two strengths, and the difference matters:
+ *
+ * - `nodesOf` keeps every object entry, id or not. Recursive walkers use it, because an entry
+ *   with no id of its own may still CONTAIN ids, and a walk that drops it stops seeing them.
+ * - `itemsOf` keeps only ADDRESSABLE entries — an object with a non-empty string `id` — for the
+ *   callers that key meta or a `Set` off `item.id`. An empty id is not addressable: registering
+ *   it would make every later empty-id entry collide with it and report a duplicate that
+ *   anchors to nothing. It is exactly what `classifyItems` treats as malformed, and the two
+ *   must agree.
+ *
+ * Callers that must REPORT a malformed entry rather than skip it — the validators — inspect the
+ * raw value themselves.
  */
-export function itemsOf<T extends { id: string }>(value: unknown): T[] {
+export function nodesOf<T>(value: unknown): T[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((x): x is T =>
-    typeof x === 'object' && x !== null && typeof (x as { id?: unknown }).id === 'string');
+  return value.filter((x): x is T => typeof x === 'object' && x !== null);
+}
+
+/** Addressable entries only — see `nodesOf` for why the two differ. */
+export function itemsOf<T extends { id: string }>(value: unknown): T[] {
+  return nodesOf<T>(value).filter((x) => typeof x.id === 'string' && x.id !== '');
 }
 
 /** Child elements of a node, when it is a structural parent. */

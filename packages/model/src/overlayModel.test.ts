@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ReportDefinitionDoc, ReportElementNode } from './designerModel';
 import {
-  BODY_PSEUDO_ANCHOR, collectAllIds, insertElement, isOverlayEmpty, mergePreview, nextId,
+  BODY_PSEUDO_ANCHOR, collectAllIds, collectSubtreeIds, insertElement, isOverlayEmpty, mergePreview, nextId,
   resetElementProp, restoreElement, serializeOverlay, setElementProp, suppressElement,
   validateInserted,
   type ReportOverlayDoc,
@@ -217,6 +217,44 @@ describe('overlayModel — merge preview server-parity edge cases', () => {
     const effective = preview.effectiveDoc.body!.find((n) => n.id === 'tbl-2') as { columns?: unknown[] };
     expect(effective.columns).toEqual([]);
     expect(validateInserted(preview)).toContainEqual({ id: 'tbl-2.columns[0]', code: 'columnMalformed' });
+  });
+
+  it('collectSubtreeIds keeps descending through a node that has no id of its own', () => {
+    // The collision scan exists to catch a clash on ANY id in the payload, so it must not stop
+    // at an id-less node: its descendants carry ids too. Filtering the walk to id-carrying
+    // entries silently narrowed it, and a nested clash then merged instead of being skipped.
+    const element = { id: 'box-1', type: 'container', children: [{ type: 'row', children: [{ id: 'deep', type: 'text' }] }] };
+    expect(collectSubtreeIds(element)).toEqual(['box-1', 'deep']);
+
+    const doc: ReportDefinitionDoc = { schemaVersion: 1, key: 'k', version: '1', body: [{ id: 'deep', type: 'text', text: 'published' }] };
+    const preview = mergePreview(doc, {
+      insert: [{ id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto', element }],
+    });
+    expect(preview.warnings.some((w) => w.code === 'InsertIdCollision' && w.targetId === 'deep')).toBe(true);
+    expect(preview.displayDoc.body!.some((n) => n.id === 'box-1')).toBe(false);
+  });
+
+  it('validateInserted treats an empty-string id as unaddressable, not as a duplicate', () => {
+    // `id: ''` is a string, so an id-check that only looks at the type registers it — and the
+    // second empty id then collides with the first, reporting a duplicateId whose own anchor is
+    // blank. That is the #34 defect wearing a different shape, so the tolerant reader and the
+    // classifier have to agree that empty is not addressable.
+    const overlay: ReportOverlayDoc = {
+      insert: [{
+        id: 'ins-1', anchor: BODY_PSEUDO_ANCHOR, position: 'appendInto',
+        element: { id: 'tbl-1', type: 'table', bind: 'x', columns: [{ id: '', header: 'A', path: 'a' }, { id: '', header: 'B', path: 'b' }] },
+      }],
+    };
+    const problems = validateInserted(mergePreview(standard(), overlay));
+    expect(problems).toEqual([
+      { id: 'tbl-1.columns[0]', code: 'columnMalformed' },
+      { id: 'tbl-1.columns[1]', code: 'columnMalformed' },
+      // Accurate, not noise: neither column can be addressed, so the table has none.
+      { id: 'tbl-1', code: 'tableMissingColumns' },
+    ]);
+    // The point of the test: no problem anchors to the empty id, and none is a duplicateId.
+    expect(problems.every((p) => p.id !== '')).toBe(true);
+    expect(problems.some((p) => p.code === 'duplicateId')).toBe(false);
   });
 
   it('validateInserted flags a duplicate column id anywhere in the document', () => {

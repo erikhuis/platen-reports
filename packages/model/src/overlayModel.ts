@@ -13,7 +13,7 @@
  */
 
 import {
-  childElements, itemsOf, KNOWN_ELEMENT_TYPES, walkElements,
+  childElements, itemsOf, KNOWN_ELEMENT_TYPES, nodesOf, walkElements,
   type KeyValuePairNode, type ReportDefinitionDoc, type ReportElementNode, type TableColumnNode,
 } from './designerModel';
 
@@ -178,10 +178,12 @@ export function collectSubtreeIds(element: Record<string, unknown>): string[] {
     if (!node || typeof node !== 'object') return;
     if (typeof node.id === 'string') ids.push(node.id);
     // Untyped walk: `node` is payload JSON, so `columns` may be a grid's column COUNT rather
-    // than a list. itemsOf yields nothing for a number, where a bare `?? []` threw.
-    for (const child of itemsOf<AnyNode>(node.children)) visit(child);
-    for (const c of itemsOf<AnyNode>(node.columns)) visit(c);
-    for (const p of itemsOf<AnyNode>(node.pairs)) visit(p);
+    // than a list. nodesOf yields nothing for a number, where a bare `?? []` threw — and it is
+    // deliberately the WEAKER filter: an entry with no id of its own may still contain ids, and
+    // this scan exists to catch a clash on ANY id in the payload.
+    for (const child of nodesOf<AnyNode>(node.children)) visit(child);
+    for (const c of nodesOf<AnyNode>(node.columns)) visit(c);
+    for (const p of nodesOf<AnyNode>(node.pairs)) visit(p);
   };
   visit(element as AnyNode);
   return ids;
@@ -459,12 +461,13 @@ export function setElementProp(
       if (op.id !== insertPatchId) return op;
       const findTarget = (el: AnyNode): AnyNode | null => {
         if (el.id === id) return el;
-        for (const child of itemsOf<AnyNode>(el.children)) {
+        // nodesOf, not itemsOf: an id-less node still holds descendants that DO carry ids.
+        for (const child of nodesOf<AnyNode>(el.children)) {
           const hit = findTarget(child);
           if (hit) return hit;
         }
-        for (const c of itemsOf<AnyNode>(el.columns)) if (c.id === id) return c;
-        for (const p of itemsOf<AnyNode>(el.pairs)) if (p.id === id) return p;
+        for (const c of nodesOf<AnyNode>(el.columns)) if (c.id === id) return c;
+        for (const p of nodesOf<AnyNode>(el.pairs)) if (p.id === id) return p;
         return null;
       };
       const element = clone(op.element) as AnyNode;
