@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -15,19 +16,43 @@ const packageDir = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const sourceDir = join(packageDir, 'src');
 
 /**
- * Removes comments and template literals so the import scan sees code, not prose or test data.
+ * Every module `source` actually reaches for: static imports, `export … from`, dynamic
+ * `import()` and `require()`.
  *
- * Comments go first, because they routinely contain backticks — this file's own do — which would
- * unbalance the template pass. Nothing lost this way can be a real import: `import x from` a
- * template literal is not valid syntax, so a specifier inside one is always a string that merely
- * looks like an import. elementTypeGate.test.ts embeds whole TypeScript snippets to feed the
- * compiler, and all three tripped this scan before templates were stripped.
+ * Parsed, not pattern-matched. Scanning text for `from '…'` cannot tell code from a string that
+ * looks like code, and both directions of that have bitten this guard: it first failed against
+ * its own prose describing what it looks for, and a later regex that stripped template literals
+ * to accommodate elementTypeGate.test.ts's embedded snippets would silently swallow a real
+ * `require` sitting between two unbalanced backticks — a zero-dependency guard reporting clean
+ * because it could not see the dependency. The compiler already answers this question exactly,
+ * and `typescript` is a devDependency here for the declarations test, so ask it.
  */
-function stripNonCode(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^[ \t]*\/\/.*$/gm, '')
-    .replace(/`(?:[^`\\]|\\[\s\S])*`/g, '``');
+function moduleSpecifiers(source: string, fileName: string): string[] {
+  const parsed = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true);
+  const specifiers: string[] = [];
+
+  const visit = (node: ts.Node): void => {
+    // `import … from 'x'`, a bare `import 'x'`, and `export … from 'x'`.
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node))
+      && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      specifiers.push(node.moduleSpecifier.text);
+    }
+    // `import('x')` and `require('x')`. A non-literal argument cannot be resolved statically
+    // and is not something this package does, so it is left alone deliberately.
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const isRequire = ts.isIdentifier(callee) && callee.text === 'require';
+      const isDynamicImport = callee.kind === ts.SyntaxKind.ImportKeyword;
+      const [first] = node.arguments;
+      if ((isRequire || isDynamicImport) && first && ts.isStringLiteral(first)) {
+        specifiers.push(first.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(parsed);
+  return specifiers;
 }
 
 const manifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as {
@@ -55,37 +80,19 @@ describe('packaging', () => {
   it('imports nothing outside this package', () => {
     const offenders: string[] = [];
 
-    // Every syntactic shape that can reach for a module: `import x from '...'`, a bare
-    // side-effect `import '...'`, a dynamic `import('...')`, and CommonJS `require('...')`.
-    // A `from`-only scan misses the first two entirely — a bare or dynamic import of an
-    // external package would resolve (or fail to) without ever matching `from`.
-    const importPatterns = [
-      /\bfrom\s+['"]([^'"]+)['"]/g,
-      /^\s*import\s+['"]([^'"]+)['"]/gm,
-      /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-      /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    ];
-
     for (const file of readdirSync(sourceDir).filter((f) => f.endsWith('.ts'))) {
-      // Comments are stripped first. Without that the scan matches prose and commented-out
-      // code — including this file's own description of what it looks for, which is how the
-      // guard first failed against itself.
-      const source = stripNonCode(readFileSync(join(sourceDir, file), 'utf8'));
-      // A module specifier that is not relative. Test files may reach for the runner and for
-      // node builtins; nothing that ships may reach for anything at all.
-      for (const pattern of importPatterns) {
-        for (const match of source.matchAll(pattern)) {
-          const specifier = match[1]!;
-          if (specifier.startsWith('.')) {
-            continue;
-          }
-          // Test files may reach for the runner, node builtins, and the compiler that
-          // declarations.test.ts runs over dist/. Nothing that ships may reach for anything.
-          const allowedInTests = file.endsWith('.test.ts')
-            && (specifier === 'vitest' || specifier === 'typescript' || specifier.startsWith('node:'));
-          if (!allowedInTests) {
-            offenders.push(`${file} → ${specifier}`);
-          }
+      const source = readFileSync(join(sourceDir, file), 'utf8');
+      for (const specifier of moduleSpecifiers(source, file)) {
+        // Relative specifiers stay inside the package by definition.
+        if (specifier.startsWith('.')) {
+          continue;
+        }
+        // Test files may reach for the runner, node builtins, and the compiler that
+        // declarations.test.ts runs over dist/. Nothing that ships may reach for anything.
+        const allowedInTests = file.endsWith('.test.ts')
+          && (specifier === 'vitest' || specifier === 'typescript' || specifier.startsWith('node:'));
+        if (!allowedInTests) {
+          offenders.push(`${file} → ${specifier}`);
         }
       }
     }

@@ -36,7 +36,7 @@ function compile(snippet: string): string[] {
   const dir = mkdtempSync(join(tmpdir(), 'platen-gate-'));
   tempDirs.push(dir);
   const file = join(dir, 'probe.ts');
-  writeFileSync(file, snippet.replace('@@MODEL@@', join(sourceDir, 'designerModel').replace(/\\/g, '/')));
+  writeFileSync(file, snippet.replaceAll('@@MODEL@@', join(sourceDir, 'designerModel').replace(/\\/g, '/')));
 
   const { options } = ts.convertCompilerOptionsFromJson(
     {
@@ -48,7 +48,14 @@ function compile(snippet: string): string[] {
   const program = ts.createProgram([file], options);
   const probe = program.getSourceFile(file);
   if (!probe) throw new Error('the probe never made it into the compiler program');
-  return program.getSemanticDiagnostics(probe).map((d) => `TS${d.code}`);
+  // Syntactic as well as semantic. With semantic alone the clean-compile control below passes
+  // for a probe that does not even parse — TypeScript recovers, reports the break only as a
+  // syntactic diagnostic, and the control that exists to prove the other assertions mean
+  // something quietly stops meaning anything.
+  return [
+    ...program.getSyntacticDiagnostics(probe),
+    ...program.getSemanticDiagnostics(probe),
+  ].map((d) => `TS${d.code}`);
 }
 
 /** `true` only when the two types are mutually assignable — neither wider nor narrower. */
