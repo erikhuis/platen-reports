@@ -18,7 +18,7 @@ Two consumers need the model without needing a UI:
 
 | | |
 |---|---|
-| **Document model** | The eleven element types, page setup, styles, localized text, parameters. Mirrors what the engine's parser accepts, so a designer cannot build a shape the parser rejects. |
+| **Document model** | Every element type, page setup, styles, localized text, parameters. Mirrors what the engine's parser accepts, so a designer cannot build a shape the parser rejects. `KNOWN_ELEMENT_TYPES` is that vocabulary as a value, keyed off the `ReportElementType` union so it cannot fall out of step with the model — prefer it to hand-listing the types, which is exactly the drift it exists to prevent. |
 | **Overlay algebra** | `suppress` / `insert` / `setProps`, the allowlist that bounds them, and `mergePreview` — a client-side mirror of the engine's merge, used to show an author the result before saving. |
 | **Direct authoring** | Pure helpers that mutate a definition document itself, for publishing rather than patching. |
 | **Wire contracts** | The shapes a host's reporting API speaks, and `ReportsApiClient` — the port the designer calls, which the host binds to its own transport. |

@@ -1,7 +1,7 @@
 /**
  * Typed client model of a report definition.
  *
- * Mirrors the engine's own model — the eleven element types its parser accepts — so a
+ * Mirrors the engine's own model — every element type its parser accepts — so a
  * designer can never build a shape the parser would reject. Nothing here parses or renders;
  * this is the vocabulary both sides agree on.
  */
@@ -148,6 +148,25 @@ export type ReportElementNode =
   | PageNumberElementNode;
 
 export type ReportElementType = ReportElementNode['type'];
+
+/**
+ * Every element type the validators accept, keyed off the union so the compiler maintains it.
+ *
+ * The gate this replaces was a hand-written `Set` of the same eleven strings, duplicated in
+ * `validateInserted` and `validateDefinition`, with nothing tying either copy to
+ * `ReportElementNode`. Adding a twelfth element type without touching both would make the
+ * validators report valid content as `unknownElementType` — a drifted gate is worse than no
+ * gate, because it turns a permissive check into an actively wrong one. Annotated as a
+ * `Record` over the union, a missing member is `TS2741` and a spurious one `TS2353`, so the
+ * list cannot drift without the build saying so. See #11.
+ *
+ * Membership is tested with `Object.hasOwn`, not `in` or a truthiness lookup: only own
+ * properties count, so an element typed `toString` or `__proto__` is unknown, as it should be.
+ */
+export const KNOWN_ELEMENT_TYPES: Record<ReportElementType, true> = {
+  text: true, field: true, row: true, column: true, container: true, table: true,
+  keyValueGrid: true, spacer: true, line: true, image: true, pageNumber: true,
+};
 
 export interface ReportParameterDef {
   name: string;

@@ -13,7 +13,7 @@
  */
 
 import {
-  childElements, walkElements,
+  childElements, KNOWN_ELEMENT_TYPES, walkElements,
   type KeyValuePairNode, type ReportDefinitionDoc, type ReportElementNode, type TableColumnNode,
 } from './designerModel';
 
@@ -546,8 +546,6 @@ export function insertElement(
 export function validateInserted(preview: MergePreview): OverlayProblem[] {
   const problems: OverlayProblem[] = [];
   const seen = new Set<string>();
-  // Shares the vocabulary (and now the element-type gate) with validateDefinition.
-  const known = new Set(['text', 'field', 'row', 'column', 'container', 'table', 'keyValueGrid', 'spacer', 'line', 'image', 'pageNumber']);
 
   const isBodySection = (id: string): boolean => {
     const inHeader = preview.displayDoc.pageHeader
@@ -574,7 +572,7 @@ export function validateInserted(preview: MergePreview): OverlayProblem[] {
     if (el.type === 'keyValueGrid') for (const p of el.pairs) registerId(p.id);
     if (!preview.meta.get(el.id)?.insertPatchId) continue;
 
-    if (!known.has(el.type)) { problems.push({ id: el.id, code: 'unknownElementType', values: { type: el.type } }); continue; }
+    if (!Object.hasOwn(KNOWN_ELEMENT_TYPES, el.type)) { problems.push({ id: el.id, code: 'unknownElementType', values: { type: el.type } }); continue; }
 
     switch (el.type) {
       case 'text':

@@ -43,6 +43,7 @@ export {
   REPORT_SETTINGS_ID,
   DESIGNER_LANGUAGES,
   ELEMENT_DEFAULTS,
+  KNOWN_ELEMENT_TYPES,
   resolveLocalized,
   countChangedProps,
   childElements,
