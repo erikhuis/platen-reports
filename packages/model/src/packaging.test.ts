@@ -14,9 +14,20 @@ import { describe, expect, it } from 'vitest';
 const packageDir = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const sourceDir = join(packageDir, 'src');
 
-/** Removes block and line comments so the import scan sees code, not prose. */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+/**
+ * Removes comments and template literals so the import scan sees code, not prose or test data.
+ *
+ * Comments go first, because they routinely contain backticks — this file's own do — which would
+ * unbalance the template pass. Nothing lost this way can be a real import: `import x from` a
+ * template literal is not valid syntax, so a specifier inside one is always a string that merely
+ * looks like an import. elementTypeGate.test.ts embeds whole TypeScript snippets to feed the
+ * compiler, and all three tripped this scan before templates were stripped.
+ */
+function stripNonCode(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ \t]*\/\/.*$/gm, '')
+    .replace(/`(?:[^`\\]|\\[\s\S])*`/g, '``');
 }
 
 const manifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as {
@@ -59,7 +70,7 @@ describe('packaging', () => {
       // Comments are stripped first. Without that the scan matches prose and commented-out
       // code — including this file's own description of what it looks for, which is how the
       // guard first failed against itself.
-      const source = stripComments(readFileSync(join(sourceDir, file), 'utf8'));
+      const source = stripNonCode(readFileSync(join(sourceDir, file), 'utf8'));
       // A module specifier that is not relative. Test files may reach for the runner and for
       // node builtins; nothing that ships may reach for anything at all.
       for (const pattern of importPatterns) {

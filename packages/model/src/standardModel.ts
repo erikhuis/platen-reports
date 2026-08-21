@@ -7,7 +7,7 @@
  */
 
 import {
-  childElements, ELEMENT_DEFAULTS, walkElements,
+  childElements, ELEMENT_DEFAULTS, KNOWN_ELEMENT_TYPES, walkElements,
   type ReportDefinitionDoc, type ReportElementNode,
 } from './designerModel';
 import { BODY_PSEUDO_ANCHOR, type OverlayProblem } from './overlayModel';
@@ -173,7 +173,6 @@ function* walkOne(node: ReportElementNode): Generator<ReportElementNode> {
 export function validateDefinition(doc: ReportDefinitionDoc): OverlayProblem[] {
   const problems: OverlayProblem[] = [];
   const seen = new Set<string>();
-  const known = new Set(['text', 'field', 'row', 'column', 'container', 'table', 'keyValueGrid', 'spacer', 'line', 'image', 'pageNumber']);
 
   // Doc-level required fields — all editable in standard mode (Report settings), so mirror the
   // parser's "'x' is required" rules here or Export would ship a file the server rejects.
@@ -204,7 +203,7 @@ export function validateDefinition(doc: ReportDefinitionDoc): OverlayProblem[] {
         if (!p.path && !p.template) problems.push({ id: p.id, code: 'pairMissingValue' });
       }
     }
-    if (!known.has(el.type)) { problems.push({ id: el.id, code: 'unknownElementType', values: { type: el.type } }); continue; }
+    if (!Object.hasOwn(KNOWN_ELEMENT_TYPES, el.type)) { problems.push({ id: el.id, code: 'unknownElementType', values: { type: el.type } }); continue; }
     switch (el.type) {
       case 'text':
         if (!el.text || (typeof el.text === 'string' && el.text.trim() === '')) problems.push({ id: el.id, code: 'textElementEmpty' });
