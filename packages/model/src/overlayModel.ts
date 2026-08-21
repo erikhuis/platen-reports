@@ -563,14 +563,38 @@ export function validateInserted(preview: MergePreview): OverlayProblem[] {
     if (seen.has(id)) problems.push({ id, code: 'duplicateId', values: { id } });
     seen.add(id);
   };
+  const isInsert = (id: string): boolean => Boolean(preview.meta.get(id)?.insertPatchId);
 
   for (const el of walkElements(preview.displayDoc)) {
     registerId(el.id);
     // Column/pair ids share the document id namespace (they are overlay anchors), so a
     // duplicate anywhere is a problem — mirror the server's subtree id-uniqueness scan.
-    if (el.type === 'table') for (const c of el.columns) registerId(c.id);
-    if (el.type === 'keyValueGrid') for (const p of el.pairs) registerId(p.id);
-    if (!preview.meta.get(el.id)?.insertPatchId) continue;
+    // `?? []` is load-bearing, not defensive typing: `insert.element` is arbitrary host JSON
+    // and mergePreview only requires it to carry an id, so a table payload with no `columns`
+    // reaches here and must produce `tableMissingColumns` rather than throw.
+    if (el.type === 'table') for (const c of el.columns ?? []) registerId(c.id);
+    if (el.type === 'keyValueGrid') for (const p of el.pairs ?? []) registerId(p.id);
+
+    // Column/pair value checks run BEFORE the owner gate, once per item. `metaFor` keys meta
+    // by each inserted node's OWN id, so a column added to a *published* table is an insert
+    // in its own right while its owner is not — gating these on the owner let such a column
+    // save with neither `path` nor `template` (#12). The owner half is not redundant either:
+    // a wholly-inserted table registers meta for the table id alone, never for its nested
+    // column ids. Published items inside published owners stay unflagged: that content
+    // belongs to the definition, not the overlay.
+    const ownerInserted = isInsert(el.id);
+    if (el.type === 'table') {
+      for (const c of el.columns ?? []) {
+        if (!ownerInserted && !isInsert(c.id)) continue;
+        if (!c.path && !c.template) problems.push({ id: c.id, code: 'columnMissingValue' });
+      }
+    } else if (el.type === 'keyValueGrid') {
+      for (const p of el.pairs ?? []) {
+        if (!ownerInserted && !isInsert(p.id)) continue;
+        if (!p.path && !p.template) problems.push({ id: p.id, code: 'pairMissingValue' });
+      }
+    }
+    if (!ownerInserted) continue;
 
     if (!Object.hasOwn(KNOWN_ELEMENT_TYPES, el.type)) { problems.push({ id: el.id, code: 'unknownElementType', values: { type: el.type } }); continue; }
 
@@ -584,16 +608,9 @@ export function validateInserted(preview: MergePreview): OverlayProblem[] {
         if (!el.path) problems.push({ id: el.id, code: 'fieldMissingPath' });
         break;
       case 'table':
+        // Per-column values are checked above, for inserted owners and inserted columns alike.
         if (!el.bind) problems.push({ id: el.id, code: 'tableMissingBind' });
         else if (!el.columns?.length) problems.push({ id: el.id, code: 'tableMissingColumns' });
-        else for (const c of el.columns) {
-          if (!c.path && !c.template) problems.push({ id: c.id, code: 'columnMissingValue' });
-        }
-        break;
-      case 'keyValueGrid':
-        for (const p of el.pairs) {
-          if (!p.path && !p.template) problems.push({ id: p.id, code: 'pairMissingValue' });
-        }
         break;
       case 'image':
         if ((el.source ?? 'tenantLogo') !== 'tenantLogo') {
