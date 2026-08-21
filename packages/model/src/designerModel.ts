@@ -256,6 +256,30 @@ export function countChangedProps(
   return keys.filter((k) => obj[k] !== undefined && obj[k] !== defaults[k]).length;
 }
 
+/**
+ * A node's `columns` / `pairs` as addressable items — tolerant of JSON that is not shaped the
+ * way the types claim.
+ *
+ * Every traversal here runs over documents and overlay payloads a HOST supplies. The types say
+ * `columns: TableColumnNode[]`, but nothing enforces that at runtime, and two shapes reach these
+ * walks routinely:
+ *
+ * - `keyValueGrid.columns` is the column COUNT, a number — so an untyped walker that reads
+ *   `node.columns` on any node hits a number, not a list (`standardModel`'s `locate` already
+ *   guards exactly this).
+ * - An overlay's `insert.element` is arbitrary JSON; `mergePreview` requires only an `id`.
+ *
+ * Anything that is not an array yields no items, and items that cannot be addressed (not an
+ * object, or with no string `id`) are dropped, because every caller keys meta or ids off
+ * `item.id`. Callers that must REPORT a malformed item rather than skip it — the validators —
+ * inspect the raw value themselves.
+ */
+export function itemsOf<T extends { id: string }>(value: unknown): T[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((x): x is T =>
+    typeof x === 'object' && x !== null && typeof (x as { id?: unknown }).id === 'string');
+}
+
 /** Child elements of a node, when it is a structural parent. */
 export function childElements(node: ReportElementNode): ReportElementNode[] {
   switch (node.type) {
@@ -298,11 +322,11 @@ export function findSelection(doc: ReportDefinitionDoc, id: string): FoundSelect
   for (const element of walkElements(doc)) {
     if (element.id === id) return { element };
     if (element.type === 'table') {
-      const column = element.columns.find((c) => c.id === id);
+      const column = itemsOf<TableColumnNode>(element.columns).find((c) => c.id === id);
       if (column) return { element, column };
     }
     if (element.type === 'keyValueGrid') {
-      const pair = element.pairs.find((p) => p.id === id);
+      const pair = itemsOf<KeyValuePairNode>(element.pairs).find((p) => p.id === id);
       if (pair) return { element, pair };
     }
   }

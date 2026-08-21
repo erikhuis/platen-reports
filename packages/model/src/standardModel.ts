@@ -7,10 +7,13 @@
  */
 
 import {
-  childElements, ELEMENT_DEFAULTS, KNOWN_ELEMENT_TYPES, walkElements,
-  type ReportDefinitionDoc, type ReportElementNode,
+  childElements, ELEMENT_DEFAULTS, itemsOf, KNOWN_ELEMENT_TYPES, walkElements,
+  type ReportDefinitionDoc, type ReportElementNode, type TableColumnNode,
 } from './designerModel';
-import { BODY_PSEUDO_ANCHOR, type OverlayProblem } from './overlayModel';
+import {
+  BODY_PSEUDO_ANCHOR, classifyItems,
+  type OverlayProblem, type OverlayProblemCode,
+} from './overlayModel';
 import type { InsertTarget } from './designerEditing';
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -184,25 +187,35 @@ export function validateDefinition(doc: ReportDefinitionDoc): OverlayProblem[] {
     if (!p.name?.trim()) problems.push({ id: `parameters[${i}]`, code: 'parameterMissingName', values: { index: String(i + 1) } });
   });
 
+  /**
+   * Columns / pairs, per item. The classifier is shared with `validateInserted` so the two
+   * validators agree on what is malformed; the difference is the gate around it — direct
+   * authoring owns the whole document, so every item is checked, not just inserted ones.
+   */
+  const checkItems = (
+    owner: ReportElementNode,
+    raw: unknown,
+    field: 'columns' | 'pairs',
+    missingValue: OverlayProblemCode,
+    malformed: OverlayProblemCode,
+  ): void => {
+    for (const item of classifyItems(owner.id, raw, field)) {
+      if (!item.node) { problems.push({ id: item.id, code: malformed }); continue; }
+      if (seen.has(item.id)) problems.push({ id: item.id, code: 'duplicateId', values: { id: item.id } });
+      seen.add(item.id);
+      if (!item.node.path && !item.node.template) problems.push({ id: item.id, code: missingValue });
+    }
+  };
+
   for (const el of walkElements(doc)) {
     if (!el.id) { problems.push({ id: '?', code: 'elementMissingId' }); continue; }
     if (seen.has(el.id)) problems.push({ id: el.id, code: 'duplicateId', values: { id: el.id } });
     seen.add(el.id);
-    // Columns / pairs need a path or template.
-    if (el.type === 'table') {
-      for (const c of el.columns ?? []) {
-        if (seen.has(c.id)) problems.push({ id: c.id, code: 'duplicateId', values: { id: c.id } });
-        seen.add(c.id);
-        if (!c.path && !c.template) problems.push({ id: c.id, code: 'columnMissingValue' });
-      }
-    }
-    if (el.type === 'keyValueGrid') {
-      for (const p of el.pairs ?? []) {
-        if (seen.has(p.id)) problems.push({ id: p.id, code: 'duplicateId', values: { id: p.id } });
-        seen.add(p.id);
-        if (!p.path && !p.template) problems.push({ id: p.id, code: 'pairMissingValue' });
-      }
-    }
+    // Columns / pairs need a path or template. Direct authoring has no published/inserted
+    // split — the author owns the whole document — so unlike validateInserted every item is
+    // checked, but an unaddressable one is reported the same way, against its owner (#34).
+    if (el.type === 'table') checkItems(el, el.columns, 'columns', 'columnMissingValue', 'columnMalformed');
+    if (el.type === 'keyValueGrid') checkItems(el, el.pairs, 'pairs', 'pairMissingValue', 'pairMalformed');
     if (!Object.hasOwn(KNOWN_ELEMENT_TYPES, el.type)) { problems.push({ id: el.id, code: 'unknownElementType', values: { type: el.type } }); continue; }
     switch (el.type) {
       case 'text':
@@ -213,7 +226,7 @@ export function validateDefinition(doc: ReportDefinitionDoc): OverlayProblem[] {
         break;
       case 'table':
         if (!el.bind) problems.push({ id: el.id, code: 'tableMissingBind' });
-        else if (!el.columns?.length) problems.push({ id: el.id, code: 'tableMissingColumns' });
+        else if (!itemsOf<TableColumnNode>(el.columns).length) problems.push({ id: el.id, code: 'tableMissingColumns' });
         break;
       case 'image':
         if ((el.source ?? 'tenantLogo') !== 'tenantLogo') problems.push({ id: el.id, code: 'unsupportedImageSource' });

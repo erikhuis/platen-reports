@@ -68,6 +68,8 @@ export const PROBLEM_MESSAGE_KEYS: Record<OverlayProblemCode, string> = {
   tableMissingColumns: 'designerProblemTableNoColumns',
   columnMissingValue: 'designerProblemColumnNoValue',
   pairMissingValue: 'designerProblemPairNoValue',
+  columnMalformed: 'designerProblemColumnMalformed',
+  pairMalformed: 'designerProblemPairMalformed',
   unsupportedImageSource: 'designerProblemImageSource',
   pageNumberInBody: 'designerProblemPageNumberInBody',
   invalidContainerWidth: 'designerProblemContainerWidth',
