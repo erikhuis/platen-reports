@@ -50,14 +50,14 @@ git fetch origin main && git switch -c fix/$ARGUMENTS-<short-slug> origin/main
 ```
 
 Confirm the clone is clean and in sync first. **If `git status` is dirty, stop and look** — a
-deep review run in another session leaves uncommitted changes in the working tree, and this has
-happened on four separate slices. Do not stash or discard them without reading them.
+deep review run in another session can leave uncommitted changes in the working tree. Do not
+stash or discard them without reading them.
 
 ## 3. Implement
 
 - Repo conventions are `.editorconfig` (braces enforced **as errors**), `Directory.Build.props`
-  (warnings-as-errors, XML docs required on public members), `Directory.Packages.props` (central
-  versions, permissive licences only) and `docs/`. There is no `CLAUDE.md` here, and AssetWorld's
+  (warnings-as-errors; XML docs on public members are wanted but not yet enforced), `Directory.Packages.props`
+  (central versions, permissive licences only) and `docs/`. There is no `CLAUDE.md` here, and AssetWorld's
   does not apply.
 - `dotnet format style <project> --severity info` fixes the brace violations rather than hand-editing.
 - Tests for every non-trivial behaviour: xUnit + FluentAssertions on .NET, vitest on npm.
@@ -74,8 +74,8 @@ pnpm -r --filter './packages/**' test
 
 **Build before typecheck.** `@platen-reports/designer` typechecks against
 `@platen-reports/model`'s *emitted* declarations, so with no `dist/` every model import resolves
-to nothing — measured at 148 phantom "implicitly has an 'any' type" errors naming files nowhere
-near the cause.
+to nothing and `tsc` reports a flood of phantom "implicitly has an 'any' type" errors naming
+files nowhere near the cause.
 
 **No preview step.** This repo has no runnable app. Say so and skip; do not invent a check, and
 do not start AssetWorld's dev server to "verify" package code.
@@ -100,8 +100,8 @@ Review the diff yourself: `gh pr diff <PR#>` plus `git diff origin/main...HEAD`.
 correctness gaps, missing edge cases, unhandled errors, missing tests. Post the findings as a PR
 comment, then fix the substantive ones and say how.
 
-**Do NOT call the `code-review` skill** — it is flagged `disable-model-invocation` and the Skill
-tool refuses it. The deeper pass is the user's, at the gate below.
+Don't invoke the `code-review` skill yourself: the deeper pass is the user's, run at the gate
+below.
 
 **Do not invent findings.** A pass that found nothing says so.
 
@@ -192,7 +192,7 @@ uncommitted-review-changes reason as step 2.
 The run is INCOMPLETE until `gh pr view <PR#> --json state` reads `MERGED`. Pausing at the gate is
 the one sanctioned stop and is not incomplete — end there with the ask, not a summary.
 
-Otherwise close with under 300 words: PR URL and merge SHA, files changed, tests added, each
-acceptance criterion and how it was verified, any deviations and why, and follow-ups filed.
+Otherwise close with a short, scannable report: PR URL and merge SHA, files changed, tests added,
+each acceptance criterion and how it was verified, any deviations and why, and follow-ups filed.
 
 Begin.
